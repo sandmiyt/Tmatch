@@ -423,7 +423,7 @@ struct BattleLobbyView: View {
             } catch {
                 matchStatus = "网络有些波动，正在继续匹配…"
             }
-            try? await Task.sleep(for: .milliseconds(1500))
+            try? await Task.sleep(for: .milliseconds(1000))
         }
     }
 
