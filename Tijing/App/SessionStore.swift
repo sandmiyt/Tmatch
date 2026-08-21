@@ -11,6 +11,11 @@ final class SessionStore {
     var pendingFriendInvite: FriendBattleInvite?
     var realtimeConnected = false
     var rankingRevision = 0
+    var homeStats: StatsResponse?
+    var homeSmartReview: SmartReviewSummary?
+    var homeChallenge: DailyChallengeSummary?
+    var homeDiagnostics: LearningDiagnostics?
+    var homeCalendarSummary: ExamCalendarSummary?
 
     private(set) var token: String?
     let api = APIClient.shared
@@ -18,11 +23,20 @@ final class SessionStore {
     private var realtimeReceiveTask: Task<Void, Never>?
     private var realtimePingTask: Task<Void, Never>?
     private var realtimeFallbackTask: Task<Void, Never>?
+    private var refreshingHomeSnapshot = false
 
     var isAuthenticated: Bool { token != nil && user != nil }
 
+    private static let cachedUserKey = "tijing.cached.current-user.v1"
+
     init() {
         token = KeychainStore.read(key: KeychainStore.authTokenKey)
+        if let token, !token.isEmpty,
+           let data = UserDefaults.standard.data(forKey: Self.cachedUserKey),
+           let cachedUser = try? JSONDecoder().decode(User.self, from: data) {
+            user = cachedUser
+            hydrateHomeCache(for: cachedUser.id)
+        }
     }
 
     func bootstrap() async {
@@ -32,6 +46,8 @@ final class SessionStore {
         defer { isBootstrapping = false }
         do {
             user = try await api.request("/api/auth/me", token: token)
+            persistCurrentUser()
+            try? await refreshHomeSnapshot()
             await refreshUnreadCount()
             startRealtime()
         } catch let error as APIError where error.statusCode == 401 || error.statusCode == 403 {
@@ -58,6 +74,7 @@ final class SessionStore {
     func refreshUser() async throws {
         guard let token else { return }
         user = try await api.request("/api/auth/me", token: token)
+        persistCurrentUser()
         await refreshUnreadCount()
     }
 
@@ -65,7 +82,14 @@ final class SessionStore {
         token = newToken
         user = newUser
         KeychainStore.save(newToken, key: KeychainStore.authTokenKey)
+        persistCurrentUser()
+        hydrateHomeCache(for: newUser.id)
         startRealtime()
+    }
+
+    func updateCurrentUser(_ newUser: User) {
+        user = newUser
+        persistCurrentUser()
     }
 
     func logout() {
@@ -75,7 +99,62 @@ final class SessionStore {
         lastError = nil
         unreadNotifications = 0
         pendingFriendInvite = nil
+        homeStats = nil
+        homeSmartReview = nil
+        homeChallenge = nil
+        homeDiagnostics = nil
+        homeCalendarSummary = nil
         KeychainStore.delete(key: KeychainStore.authTokenKey)
+        UserDefaults.standard.removeObject(forKey: Self.cachedUserKey)
+        api.clearResponseCache()
+    }
+
+    func userCacheKey(_ resource: String) -> String {
+        "user.\(user?.id ?? 0).\(resource)"
+    }
+
+    func refreshHomeSnapshot() async throws {
+        guard let token, let userID = user?.id else { return }
+        guard !refreshingHomeSnapshot else { return }
+        refreshingHomeSnapshot = true
+        defer { refreshingHomeSnapshot = false }
+        let prefix = "user.\(userID).home"
+
+        async let statsTask: StatsResponse = api.requestCached(
+            "/api/stats/me", token: token, cacheKey: "\(prefix).stats"
+        )
+        async let reviewTask: SmartReviewSummary = api.requestCached(
+            "/api/learning/smart-review", token: token, cacheKey: "\(prefix).review"
+        )
+        async let challengeTask: DailyChallengeSummary = api.requestCached(
+            "/api/challenges/daily/summary", token: token, cacheKey: "\(prefix).challenge"
+        )
+        async let diagnosticsTask: LearningDiagnostics = api.requestCached(
+            "/api/learning/diagnostics", token: token, cacheKey: "\(prefix).diagnostics"
+        )
+        async let calendarTask: ExamCalendarSummary = api.requestCached(
+            "/api/exams/calendar/summary/me", token: token, cacheKey: "\(prefix).calendar"
+        )
+
+        homeStats = try await statsTask
+        homeSmartReview = try? await reviewTask
+        homeChallenge = try? await challengeTask
+        homeDiagnostics = try? await diagnosticsTask
+        homeCalendarSummary = try? await calendarTask
+    }
+
+    private func hydrateHomeCache(for userID: Int) {
+        let prefix = "user.\(userID).home"
+        homeStats = api.cachedResponse(for: "\(prefix).stats")
+        homeSmartReview = api.cachedResponse(for: "\(prefix).review")
+        homeChallenge = api.cachedResponse(for: "\(prefix).challenge")
+        homeDiagnostics = api.cachedResponse(for: "\(prefix).diagnostics")
+        homeCalendarSummary = api.cachedResponse(for: "\(prefix).calendar")
+    }
+
+    private func persistCurrentUser() {
+        guard let user, let data = try? JSONEncoder().encode(user) else { return }
+        UserDefaults.standard.set(data, forKey: Self.cachedUserKey)
     }
 
     func appBecameActive() {

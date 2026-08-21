@@ -215,20 +215,40 @@ struct FriendsView: View {
 
     @MainActor private func load() async {
         guard let token = session.token else { loading = false; return }
-        loading = true
+        let listKey = session.userCacheKey("friends.list")
+        let blockedKey = session.userCacheKey("friends.blocks")
+
+        if friends.isEmpty, incoming.isEmpty, outgoing.isEmpty,
+           let cached: FriendListResponse = session.api.cachedResponse(for: listKey) {
+            applyFriendList(cached, useCachedPresence: true)
+        }
+        if blocked.isEmpty, let cached: BlockedResponse = session.api.cachedResponse(for: blockedKey) {
+            blocked = cached.items
+        }
+
+        loading = friends.isEmpty && incoming.isEmpty && outgoing.isEmpty
         defer { loading = false }
         do {
-            async let listTask: FriendListResponse = session.api.request("/api/friends", token: token)
-            async let blockedTask: BlockedResponse = session.api.request("/api/blocks", token: token)
+            async let listTask: FriendListResponse = session.api.requestCached("/api/friends", token: token, cacheKey: listKey)
+            async let blockedTask: BlockedResponse = session.api.requestCached("/api/blocks", token: token, cacheKey: blockedKey)
             let list = try await listTask
-            friends = list.friends; incoming = list.incoming; outgoing = list.outgoing
-            var initialPresence: [Int: Bool] = [:]
-            for relation in list.friends { initialPresence[relation.user.id] = relation.user.online ?? false }
-            presence = initialPresence
+            applyFriendList(list, useCachedPresence: false)
             let blockedResponse = try? await blockedTask
-            blocked = blockedResponse?.items ?? []
+            if let blockedResponse { blocked = blockedResponse.items }
             error = nil
-        } catch { self.error = error.localizedDescription }
+        } catch {
+            self.error = (friends.isEmpty && incoming.isEmpty && outgoing.isEmpty) ? error.localizedDescription : nil
+        }
+    }
+
+    private func applyFriendList(_ list: FriendListResponse, useCachedPresence: Bool) {
+        friends = list.friends
+        incoming = list.incoming
+        outgoing = list.outgoing
+        guard !useCachedPresence else { return }
+        var initialPresence: [Int: Bool] = [:]
+        for relation in list.friends { initialPresence[relation.user.id] = relation.user.online ?? false }
+        presence = initialPresence
     }
 
     @MainActor private func refreshPresence() async {
@@ -277,6 +297,8 @@ struct FriendsView: View {
         Task { @MainActor in
             do {
                 let _: EmptyResponse = try await session.api.request(path, method: method, body: EmptyBody(), token: token)
+                session.api.removeCachedResponse(for: session.userCacheKey("friends.list"))
+                session.api.removeCachedResponse(for: session.userCacheKey("friends.blocks"))
                 Haptics.success(); await load()
             } catch { self.error = error.localizedDescription; Haptics.error() }
         }

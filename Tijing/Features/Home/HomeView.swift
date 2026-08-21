@@ -4,12 +4,13 @@ struct HomeView: View {
     @Environment(SessionStore.self) private var session
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Binding var showingAuth: Bool
-    @State private var stats: StatsResponse?
-    @State private var smartReview: SmartReviewSummary?
-    @State private var challenge: DailyChallengeSummary?
-    @State private var dailyPlan: LearningDiagnostics?
-    @State private var calendarSummary: ExamCalendarSummary?
     @State private var loadError: String?
+
+    private var stats: StatsResponse? { session.homeStats }
+    private var smartReview: SmartReviewSummary? { session.homeSmartReview }
+    private var challenge: DailyChallengeSummary? { session.homeChallenge }
+    private var dailyPlan: LearningDiagnostics? { session.homeDiagnostics }
+    private var calendarSummary: ExamCalendarSummary? { session.homeCalendarSummary }
 
     private var gridColumns: [GridItem] {
         if dynamicTypeSize.isAccessibilitySize { return [GridItem(.flexible())] }
@@ -93,7 +94,11 @@ struct HomeView: View {
 
     private var continueHero: some View {
         NavigationLink {
-            PracticeCatalogView(initialMode: .random)
+            DirectPracticeLauncherView(
+                mode: .random,
+                subject: dailyPlan?.analysis.summary.focus?.subject,
+                topic: dailyPlan?.analysis.summary.focus?.topic
+            )
         } label: {
             TijingHeroCard {
                 ViewThatFits(in: .horizontal) {
@@ -219,7 +224,7 @@ struct HomeView: View {
                 )
 
                 NavigationLink {
-                    PracticeCatalogView(initialMode: .wrong)
+                    DirectPracticeLauncherView(mode: .wrong)
                 } label: {
                     TijingMetricTile(
                         value: "\(stats?.wrong ?? 0)",
@@ -232,7 +237,7 @@ struct HomeView: View {
                 .tijingTactileLink()
 
                 NavigationLink {
-                    PracticeCatalogView(initialMode: .favorite)
+                    DirectPracticeLauncherView(mode: .favorite)
                 } label: {
                     TijingMetricTile(
                         value: "\(stats?.favorites ?? 0)",
@@ -369,29 +374,16 @@ struct HomeView: View {
 
     @MainActor
     private func load() async {
-        guard let token = session.token else {
-            stats = nil
-            smartReview = nil
-            challenge = nil
-            dailyPlan = nil
-            calendarSummary = nil
+        guard session.token != nil else {
             loadError = nil
             return
         }
         do {
-            async let statsTask: StatsResponse = session.api.request("/api/stats/me", token: token)
-            async let reviewTask: SmartReviewSummary = session.api.request("/api/learning/smart-review", token: token)
-            async let challengeTask: DailyChallengeSummary = session.api.request("/api/challenges/daily/summary", token: token)
-            async let planTask: LearningDiagnostics = session.api.request("/api/learning/diagnostics", token: token)
-            async let calendarTask: ExamCalendarSummary = session.api.request("/api/exams/calendar/summary/me", token: token)
-            stats = try await statsTask
-            smartReview = try? await reviewTask
-            challenge = try? await challengeTask
-            dailyPlan = try? await planTask
-            calendarSummary = try? await calendarTask
+            try await session.refreshHomeSnapshot()
             loadError = nil
         } catch {
-            loadError = error.localizedDescription
+            // Keep the last successful snapshot visible when refresh fails.
+            loadError = session.homeStats == nil ? error.localizedDescription : nil
         }
     }
 }

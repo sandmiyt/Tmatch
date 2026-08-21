@@ -6,7 +6,7 @@ struct ProfileView: View {
     @Environment(SessionStore.self) private var session
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Binding var showingAuth: Bool
-    @State private var stats: StatsResponse?
+    private var stats: StatsResponse? { session.homeStats }
     @State private var confirmLogout = false
 
     private var statColumns: [GridItem] {
@@ -275,9 +275,9 @@ struct ProfileView: View {
 
     @MainActor
     private func refresh() async {
-        guard let token = session.token else { stats = nil; return }
+        guard session.token != nil else { return }
         try? await session.refreshUser()
-        stats = try? await session.api.request("/api/stats/me", token: token)
+        try? await session.refreshHomeSnapshot()
     }
 }
 
@@ -380,7 +380,7 @@ struct EditProfileView: View {
         busy = true; error = nil; defer { busy = false }
         do {
             let updated: User = try await session.api.request("/api/profile", method: .patch, body: ProfileBody(nickname: nickname, bio: bio, gender: gender), token: token)
-            session.user = updated
+            session.updateCurrentUser(updated)
             Haptics.success(); dismiss()
         } catch { self.error = error.localizedDescription; Haptics.error() }
     }
@@ -397,7 +397,7 @@ struct EditProfileView: View {
             guard let data, data.count <= 3 * 1024 * 1024 else {
                 throw APIError(message: "头像处理后仍超过 3MB，请选择尺寸更小的照片", statusCode: 0, retryAfter: nil)
             }
-            session.user = try await session.api.uploadAvatar(data, token: token)
+            session.updateCurrentUser(try await session.api.uploadAvatar(data, token: token))
             Haptics.success()
         } catch { self.error = error.localizedDescription; Haptics.error() }
     }

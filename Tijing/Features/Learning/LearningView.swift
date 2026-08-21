@@ -157,18 +157,18 @@ struct LearningView: View {
             TijingSectionHeading("下一步", subtitle: "点一下就进入，不需要重新找入口")
             LazyVGrid(columns: twoColumns, spacing: 11) {
                 actionCard(title: "今日复习", subtitle: "\(review?.due ?? 0) 题到期", icon: "clock.arrow.circlepath", tint: TijingDesign.sky) {
-                    PracticeCatalogView(initialMode: .smartReview)
+                    DirectPracticeLauncherView(mode: .smartReview)
                 }
                 if let focus = data.analysis.summary.focus {
                     actionCard(title: "专项练习", subtitle: focus.topic ?? focus.subject ?? "针对薄弱项", icon: "scope", tint: TijingDesign.sage) {
-                        FocusedPracticeLauncher(subject: focus.subject, topic: focus.topic)
+                        DirectPracticeLauncherView(mode: .random, subject: focus.subject, topic: focus.topic)
                     }
                 }
                 actionCard(title: "错题重练", subtitle: "把不稳的题再过一遍", icon: "arrow.counterclockwise.circle.fill", tint: TijingDesign.rose) {
-                    PracticeCatalogView(initialMode: .wrong)
+                    DirectPracticeLauncherView(mode: .wrong)
                 }
                 actionCard(title: "收藏练习", subtitle: "回到自己留下的重点", icon: "star.fill", tint: TijingDesign.lilac) {
-                    PracticeCatalogView(initialMode: .favorite)
+                    DirectPracticeLauncherView(mode: .favorite)
                 }
             }
         }
@@ -241,7 +241,7 @@ struct LearningView: View {
             } else {
                 ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                     NavigationLink {
-                        FocusedPracticeLauncher(subject: item.subject ?? item.name, topic: nil)
+                        DirectPracticeLauncherView(mode: .random, subject: item.subject ?? item.name, topic: nil)
                     } label: {
                         subjectCard(item, baseline: data.analysis.baselineAccuracy, tint: subjectTint(index))
                     }
@@ -343,55 +343,32 @@ struct LearningView: View {
     @MainActor
     private func load() async {
         guard let token = session.token else { return }
-        loading = true
+        if diagnostics == nil { diagnostics = session.homeDiagnostics }
+        if review == nil { review = session.homeSmartReview }
+        let diagnosticsKey = session.userCacheKey("home.diagnostics")
+        let reviewKey = session.userCacheKey("home.review")
+        if diagnostics == nil { diagnostics = session.api.cachedResponse(for: diagnosticsKey) }
+        if review == nil { review = session.api.cachedResponse(for: reviewKey) }
+
+        loading = diagnostics == nil
         defer { loading = false }
         do {
-            async let diagnosticsTask: LearningDiagnostics = session.api.request("/api/learning/diagnostics", token: token)
-            async let reviewTask: SmartReviewSummary = session.api.request("/api/learning/smart-review", token: token)
-            diagnostics = try await diagnosticsTask
-            review = try? await reviewTask
+            async let diagnosticsTask: LearningDiagnostics = session.api.requestCached(
+                "/api/learning/diagnostics", token: token, cacheKey: diagnosticsKey
+            )
+            async let reviewTask: SmartReviewSummary = session.api.requestCached(
+                "/api/learning/smart-review", token: token, cacheKey: reviewKey
+            )
+            let freshDiagnostics = try await diagnosticsTask
+            diagnostics = freshDiagnostics
+            session.homeDiagnostics = freshDiagnostics
+            if let freshReview = try? await reviewTask {
+                review = freshReview
+                session.homeSmartReview = freshReview
+            }
             error = nil
         } catch {
-            self.error = error.localizedDescription
-        }
-    }
-}
-
-private struct FocusedPracticeLauncher: View {
-    @Environment(SessionStore.self) private var session
-    let subject: String?
-    let topic: String?
-    @State private var store: PracticeSessionStore?
-    @State private var error: String?
-
-    var body: some View {
-        ZStack {
-            TijingPageBackground()
-            Group {
-                if let store {
-                    PracticeSessionView(store: store)
-                } else if let error {
-                    ContentUnavailableView("无法开始专项练习", systemImage: "exclamationmark.triangle", description: Text(error))
-                } else {
-                    ProgressView("正在读取练习设置…")
-                }
-            }
-        }
-        .navigationTitle(topic ?? subject ?? "专项练习")
-        .task { await prepare() }
-    }
-
-    @MainActor private func prepare() async {
-        guard store == nil, let token = session.token, let userID = session.user?.id else {
-            if session.token == nil { error = "请先登录" }
-            return
-        }
-        do {
-            var settings: PracticeSettings = try await session.api.request("/api/practice/settings", token: token)
-            settings.normalize()
-            store = PracticeSessionStore(mode: .random, subject: subject, topic: topic, settings: settings, token: token, userID: userID)
-        } catch {
-            self.error = error.localizedDescription
+            self.error = diagnostics == nil ? error.localizedDescription : nil
         }
     }
 }

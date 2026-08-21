@@ -67,7 +67,7 @@ struct RootView: View {
                 .presentationDragIndicator(.visible)
         }
         .overlay(alignment: .top) {
-            if session.isBootstrapping {
+            if session.isBootstrapping && session.user == nil {
                 ProgressView()
                     .padding(.horizontal, 18)
                     .padding(.vertical, 10)

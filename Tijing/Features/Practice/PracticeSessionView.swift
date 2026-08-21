@@ -42,18 +42,6 @@ struct PracticeSessionView: View {
                 ToolbarItem(placement: .principal) {
                     Text(store.progressText).font(.headline.monospacedDigit())
                 }
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    Button { Task { await store.toggleFavorite() } } label: {
-                        Image(systemName: store.currentQuestion?.favorite == true ? "star.fill" : "star")
-                    }
-                    .accessibilityLabel(store.currentQuestion?.favorite == true ? "取消收藏" : "收藏本题")
-                    Button {
-                        if let id = store.currentQuestion?.id { correctionTarget = CorrectionTarget(id: id) }
-                    } label: { Image(systemName: "flag") }
-                    .accessibilityLabel("题目纠错")
-                    Button { showAnswerSheet = true } label: { Image(systemName: "square.grid.3x3") }
-                        .accessibilityLabel("答题卡")
-                }
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -117,6 +105,8 @@ struct PracticeSessionView: View {
                     }
                 }
 
+                questionTools(question)
+
                 if let material = question.material, !material.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     TijingPaperCard(tint: TijingDesign.butter) {
                         VStack(alignment: .leading, spacing: 10) {
@@ -177,6 +167,39 @@ struct PracticeSessionView: View {
             .padding(.bottom, 32)
         }
         .scrollDismissesKeyboard(.interactively)
+    }
+
+    private func questionTools(_ question: Question) -> some View {
+        HStack(spacing: 10) {
+            PracticeToolButton(
+                title: question.favorite == true ? "已收藏" : "收藏",
+                systemImage: question.favorite == true ? "star.fill" : "star",
+                tint: question.favorite == true ? TijingDesign.amber : TijingDesign.indigo
+            ) {
+                Task { await store.toggleFavorite() }
+            }
+
+            PracticeToolButton(
+                title: "纠错",
+                systemImage: "exclamationmark.bubble",
+                tint: TijingDesign.coral
+            ) {
+                if let id = store.currentQuestion?.id {
+                    Haptics.selection()
+                    correctionTarget = CorrectionTarget(id: id)
+                }
+            }
+
+            PracticeToolButton(
+                title: "答题卡",
+                systemImage: "square.grid.3x3",
+                tint: TijingDesign.violet
+            ) {
+                Haptics.selection()
+                showAnswerSheet = true
+            }
+        }
+        .accessibilityElement(children: .contain)
     }
 
     private func bottomControls(_ question: Question) -> some View {
@@ -443,6 +466,33 @@ struct QuestionCorrectionView: View {
 private struct CorrectionBody: Encodable { let category: String; let content: String }
 private struct CorrectionResponse: Decodable { let ok: Bool; let id: Int?; let duplicate: Bool? }
 
+private struct PracticeToolButton: View {
+    let title: String
+    let systemImage: String
+    let tint: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 7) {
+                Image(systemName: systemImage)
+                    .font(.subheadline.weight(.semibold))
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(tint)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .strokeBorder(tint.opacity(0.12))
+            }
+        }
+        .buttonStyle(TijingPressableCardStyle())
+    }
+}
+
 private enum OptionVisualState: Equatable { case normal, selected, correct, wrong }
 
 private struct OptionRow: View {
@@ -474,17 +524,7 @@ private struct OptionRow: View {
         .background(background, in: RoundedRectangle(cornerRadius: 19, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 19).stroke(border, lineWidth: state == .normal ? 0.7 : 1.5))
         .shadow(color: state == .normal ? Color.black.opacity(0.025) : Color.clear, radius: 7, y: 3)
-        .overlay(alignment: .topTrailing) {
-            if state == .correct || state == .wrong {
-                Image(systemName: state == .correct ? "checkmark.circle.fill" : "xmark.circle.fill")
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(state == .correct ? Color.green : Color.red)
-                    .padding(10)
-                    .transition(.scale(scale: 0.55).combined(with: .opacity))
-            }
-        }
-        .scaleEffect(state == .correct ? 1.012 : (state == .wrong ? 0.992 : 1))
-        .animation(.spring(response: 0.34, dampingFraction: 0.70), value: state)
+        .animation(.easeOut(duration: 0.20), value: state)
         .contentShape(Rectangle())
         .onTapGesture { if !excluded { tap() } }
         .onLongPressGesture(minimumDuration: 0.45, perform: longPress)
@@ -521,7 +561,7 @@ private struct FeedbackCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 13) {
-            Label(feedback.correct ? "回答正确" : "回答错误", systemImage: feedback.correct ? "checkmark.circle.fill" : "xmark.circle.fill")
+            Text(feedback.correct ? "回答正确" : "回答错误")
                 .font(.headline)
                 .foregroundStyle(feedback.correct ? Color.green : Color.red)
 
@@ -629,7 +669,9 @@ private struct PracticeBatchResultView: View {
                                 ForEach(Array(result.details.enumerated()), id: \.element.id) { offset, item in
                                     TijingPaperCard(tint: item.correct ? TijingDesign.sage : TijingDesign.rose) {
                                         HStack(alignment: .top, spacing: 12) {
-                                            TijingStickerIcon(systemImage: item.correct ? "checkmark.circle.fill" : "xmark.circle.fill", tint: item.correct ? TijingDesign.mint : TijingDesign.coral, background: item.correct ? TijingDesign.sage : TijingDesign.rose, size: 38, rotation: -4, sparkle: false)
+                                            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                                .fill(item.correct ? TijingDesign.mint : TijingDesign.coral)
+                                                .frame(width: 4)
                                             VStack(alignment: .leading, spacing: 6) {
                                                 Text("第 \(offset + 1) 题 · \(item.correct ? "正确" : "错误")")
                                                     .font(.subheadline.weight(.semibold))

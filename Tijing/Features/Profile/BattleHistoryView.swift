@@ -65,13 +65,22 @@ struct BattleHistoryView: View {
 
     @MainActor private func load() async {
         guard let token = session.token else { return }
-        loading = true
+        let cacheKey = session.userCacheKey("battle.history.quick")
+        if items.isEmpty, let cached: [BattleHistoryItem] = session.api.cachedResponse(for: cacheKey) {
+            items = cached
+        }
+        loading = items.isEmpty
         defer { loading = false }
         do {
-            items = try await session.api.request("/api/battles/history", token: token, query: [URLQueryItem(name: "mode", value: "quick")])
+            items = try await session.api.requestCached(
+                "/api/battles/history",
+                token: token,
+                query: [URLQueryItem(name: "mode", value: "quick")],
+                cacheKey: cacheKey
+            )
             error = nil
         } catch {
-            self.error = error.localizedDescription
+            self.error = items.isEmpty ? error.localizedDescription : nil
         }
     }
 }
@@ -310,6 +319,7 @@ private struct BattleHistoryDetailView: View {
                     value.details[index].favorite = favorite
                     detail = value
                 }
+                session.api.removeCachedResponse(for: session.userCacheKey("battle.history.detail.\(recordID)"))
                 Haptics.selection()
             } catch {
                 self.error = error.localizedDescription
@@ -320,13 +330,17 @@ private struct BattleHistoryDetailView: View {
 
     @MainActor private func load() async {
         guard let token = session.token else { return }
-        loading = true
+        let cacheKey = session.userCacheKey("battle.history.detail.\(recordID)")
+        if detail == nil { detail = session.api.cachedResponse(for: cacheKey) }
+        loading = detail == nil
         defer { loading = false }
         do {
-            detail = try await session.api.request("/api/battles/history/\(recordID)", token: token)
+            detail = try await session.api.requestCached(
+                "/api/battles/history/\(recordID)", token: token, cacheKey: cacheKey
+            )
             error = nil
         } catch {
-            self.error = error.localizedDescription
+            self.error = detail == nil ? error.localizedDescription : nil
         }
     }
 }
@@ -352,26 +366,7 @@ private struct HistoryBattleReviewPanel: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("关键回合").font(.subheadline.bold())
                     ForEach(review.keyRounds) { round in
-                        Button {
-                            onRoundTap(round.questionIndex)
-                            Haptics.selection()
-                        } label: {
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack {
-                                    Text(roundLabel(round)).font(.caption.bold()).foregroundStyle(.tint)
-                                    Spacer()
-                                    Text("第 \(round.questionIndex + 1) 题").font(.caption.monospacedDigit())
-                                }
-                                Text(round.detail).font(.subheadline).foregroundStyle(.primary)
-                                if let stem = round.stem, !stem.isEmpty {
-                                    Text(stem).font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                                }
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(11)
-                            .background(Color(uiColor: .tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
+                        keyRoundRow(round)
                     }
                 }
             }
@@ -395,6 +390,58 @@ private struct HistoryBattleReviewPanel: View {
         .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
+    private func keyRoundRow(_ round: BattleReviewRound) -> some View {
+        let style = roundStyle(round)
+        return Button {
+            onRoundTap(round.questionIndex)
+            Haptics.selection()
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    HStack(spacing: 5) {
+                        Image(systemName: style.icon)
+                            .font(.caption.weight(.bold))
+                        Text(style.title)
+                            .font(.caption.weight(.bold))
+                    }
+                    .foregroundStyle(style.tint)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 6)
+                    .background(style.tint.opacity(0.11), in: Capsule())
+
+                    Spacer(minLength: 8)
+
+                    Text("第 \(round.questionIndex + 1) 题")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.bold())
+                        .foregroundStyle(.tertiary)
+                }
+
+                Text(round.detail)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.primary)
+
+                if let stem = round.stem, !stem.isEmpty {
+                    Text(stem)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(13)
+            .background(style.tint.opacity(0.055), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(style.tint.opacity(0.11))
+            }
+        }
+        .buttonStyle(TijingPressableCardStyle())
+    }
+
     private func metric(_ value: String, _ title: String, _ detail: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(value).font(.headline.monospacedDigit())
@@ -411,14 +458,19 @@ private struct HistoryBattleReviewPanel: View {
         return "\(max(1, Int((Double(milliseconds) / 1000).rounded())))秒"
     }
 
-    private func roundLabel(_ round: BattleReviewRound) -> String {
-        let labels = [
-            "first_blood": "First Blood", "shutdown": "Shutdown", "clutch": "Clutch",
-            "final_blow": "Final Blow", "speed_demon": "Speed Demon", "photo_finish": "Photo Finish",
-            "match_point": "Match Point"
-        ]
-        if let kind = round.kind, let value = labels[kind] { return value }
-        return round.label.flatMap { $0.isEmpty ? nil : $0 } ?? "关键回合"
+    private func roundStyle(_ round: BattleReviewRound) -> (title: String, icon: String, tint: Color) {
+        switch round.kind {
+        case "first_blood": return ("先手拿分", "sparkles", TijingDesign.cyan)
+        case "shutdown": return ("止住失分", "hand.raised.fill", TijingDesign.violet)
+        case "clutch": return ("关键拿分", "bolt.fill", TijingDesign.coral)
+        case "final_blow": return ("终局定胜", "flag.checkered", TijingDesign.indigo)
+        case "speed_demon": return ("极速作答", "timer", TijingDesign.mint)
+        case "photo_finish": return ("毫厘胜负", "scope", TijingDesign.amber)
+        case "match_point": return ("赛点", "target", TijingDesign.coral)
+        default:
+            let title = round.label.flatMap { $0.isEmpty ? nil : $0 } ?? "关键回合"
+            return (title, "sparkle", TijingDesign.indigo)
+        }
     }
 }
 

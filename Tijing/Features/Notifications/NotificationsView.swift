@@ -143,14 +143,23 @@ struct NotificationsView: View {
 
     @MainActor private func load() async {
         guard let token = session.token else { loading = false; return }
-        loading = true
+        let cacheKey = session.userCacheKey("notifications.list")
+        if items.isEmpty, let cached: NotificationListResponse = session.api.cachedResponse(for: cacheKey) {
+            items = cached.items
+            session.unreadNotifications = cached.unread ?? cached.items.filter { !$0.isRead }.count
+        }
+        loading = items.isEmpty
         defer { loading = false }
         do {
-            let response: NotificationListResponse = try await session.api.request("/api/notifications", token: token)
+            let response: NotificationListResponse = try await session.api.requestCached(
+                "/api/notifications", token: token, cacheKey: cacheKey
+            )
             items = response.items
             session.unreadNotifications = response.unread ?? response.items.filter { !$0.isRead }.count
             error = nil
-        } catch { self.error = error.localizedDescription }
+        } catch {
+            self.error = items.isEmpty ? error.localizedDescription : nil
+        }
     }
 
     private func markRead(_ item: AppNotification) {
@@ -166,6 +175,7 @@ struct NotificationsView: View {
         Task { @MainActor in
             do {
                 let _: EmptyResponse = try await session.api.request(path, method: method, body: EmptyBody(), token: token)
+                session.api.removeCachedResponse(for: session.userCacheKey("notifications.list"))
                 Haptics.selection(); await load()
             } catch { self.error = error.localizedDescription }
         }

@@ -1,33 +1,20 @@
 import SwiftUI
+import SafariServices
 
 struct ExamCalendarView: View {
     @Environment(SessionStore.self) private var session
-    @Environment(\.openURL) private var openURL
     @State private var response: ExamCalendarResponse?
     @State private var city = "全部"
     @State private var followedOnly = false
     @State private var loading = false
     @State private var error: String?
+    @State private var browserTarget: ExamBrowserTarget?
 
     var body: some View {
         ZStack {
             TijingPageBackground()
             ScrollView {
                 LazyVStack(spacing: 16) {
-                    TijingPaperCard(tint: TijingDesign.butter, rotation: -0.2) {
-                        HStack(spacing: 13) {
-                            TijingStickerIcon(systemImage: "calendar.badge.clock", tint: TijingDesign.amber, background: TijingDesign.butter, size: 50, rotation: -7)
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text("考试日历")
-                                    .font(.headline)
-                                Text("只看真正和报名、笔试节点有关的信息。关注后可以快速筛出来。")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer(minLength: 0)
-                        }
-                    }
-
                     TijingFieldSurface("筛选") {
                         Picker("地区", selection: $city) {
                             Text("全部").tag("全部")
@@ -65,6 +52,10 @@ struct ExamCalendarView: View {
         .refreshable { await load() }
         .sensoryFeedback(.selection, trigger: city)
         .sensoryFeedback(.selection, trigger: followedOnly)
+        .sheet(item: $browserTarget) { target in
+            ExamInAppBrowser(url: target.url)
+                .ignoresSafeArea()
+        }
     }
 
     private func examCard(_ exam: RecruitmentExam, index: Int) -> some View {
@@ -113,7 +104,7 @@ struct ExamCalendarView: View {
                 if let source = exam.sourceURL, let url = URL(string: source) {
                     Button {
                         Haptics.light()
-                        openURL(url)
+                        browserTarget = ExamBrowserTarget(url: url)
                     } label: {
                         Label("查看官方来源", systemImage: "safari")
                             .font(.footnote.weight(.semibold))
@@ -125,15 +116,24 @@ struct ExamCalendarView: View {
     }
 
     @MainActor private func load() async {
-        loading = true; defer { loading = false }
+        let path = session.token == nil ? "/api/exams/calendar" : "/api/exams/calendar/me"
+        var query: [URLQueryItem] = []
+        if city != "全部" { query.append(URLQueryItem(name: "city", value: city)) }
+        if session.token != nil { query.append(URLQueryItem(name: "followed_only", value: String(followedOnly))) }
+        let owner = session.user?.id.map(String.init) ?? "public"
+        let cacheKey = "calendar.\(owner).\(city).\(followedOnly)"
+
+        if response == nil { response = session.api.cachedResponse(for: cacheKey) }
+        loading = response == nil
+        defer { loading = false }
         do {
-            let path = session.token == nil ? "/api/exams/calendar" : "/api/exams/calendar/me"
-            var query: [URLQueryItem] = []
-            if city != "全部" { query.append(URLQueryItem(name: "city", value: city)) }
-            if session.token != nil { query.append(URLQueryItem(name: "followed_only", value: String(followedOnly))) }
-            response = try await session.api.request(path, token: session.token, query: query)
+            response = try await session.api.requestCached(
+                path, token: session.token, query: query, cacheKey: cacheKey
+            )
             error = nil
-        } catch { self.error = error.localizedDescription }
+        } catch {
+            self.error = response == nil ? error.localizedDescription : nil
+        }
     }
 
     private func toggleFollow(_ exam: RecruitmentExam) {
@@ -149,3 +149,21 @@ struct ExamCalendarView: View {
 }
 
 private struct FollowResponse: Decodable { let followed: Bool?; let examID: Int?; enum CodingKeys: String, CodingKey { case followed; case examID = "exam_id" } }
+private struct ExamBrowserTarget: Identifiable {
+    let url: URL
+    var id: String { url.absoluteString }
+}
+
+private struct ExamInAppBrowser: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeUIViewController(context: Context) -> SFSafariViewController {
+        let controller = SFSafariViewController(url: url)
+        controller.preferredControlTintColor = .systemIndigo
+        controller.dismissButtonStyle = .close
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
+}
+

@@ -284,20 +284,31 @@ struct RankingView: View {
 
     @MainActor
     private func load() async {
-        loading = true
+        if items.isEmpty, let cached: RankingResponse = session.api.cachedResponse(for: "public.ranking") {
+            items = cached.items
+            seasonInfo = cached.season
+        }
+        if seasonMe == nil, session.token != nil,
+           let cached: SeasonMeResponse = session.api.cachedResponse(for: session.userCacheKey("season.me")) {
+            seasonMe = cached
+        }
+
+        loading = items.isEmpty
         defer { loading = false }
         do {
-            let response: RankingResponse = try await session.api.request("/api/rankings")
+            let response: RankingResponse = try await session.api.requestCached("/api/rankings", cacheKey: "public.ranking")
             items = response.items
             seasonInfo = response.season
             error = nil
             if let token = session.token {
-                seasonMe = try? await session.api.request("/api/seasons/me", token: token)
+                seasonMe = try? await session.api.requestCached(
+                    "/api/seasons/me", token: token, cacheKey: session.userCacheKey("season.me")
+                )
             } else {
                 seasonMe = nil
             }
         } catch {
-            self.error = error.localizedDescription
+            self.error = items.isEmpty ? error.localizedDescription : nil
         }
     }
 }
@@ -799,12 +810,18 @@ struct PublicProfileView: View {
 
     @MainActor private func load() async {
         guard let token = session.token else { loading = false; return }
-        loading = true
+        let cacheKey = session.userCacheKey("public-profile.\(userID)")
+        if profile == nil { profile = session.api.cachedResponse(for: cacheKey) }
+        loading = profile == nil
         defer { loading = false }
         do {
-            profile = try await session.api.request("/api/users/\(userID)/profile", token: token)
+            profile = try await session.api.requestCached(
+                "/api/users/\(userID)/profile", token: token, cacheKey: cacheKey
+            )
             error = nil
-        } catch { self.error = error.localizedDescription }
+        } catch {
+            self.error = profile == nil ? error.localizedDescription : nil
+        }
     }
 
     private func friendAction(_ user: User) {

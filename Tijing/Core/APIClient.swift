@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 extension Notification.Name {
     static let tijingAuthInvalid = Notification.Name("tijing.auth.invalid")
@@ -41,6 +42,42 @@ final class APIClient: @unchecked Sendable {
         self.session = URLSession(configuration: config)
     }
 
+    func cachedResponse<Response: Decodable>(for cacheKey: String) -> Response? {
+        guard let data = Self.readCachedResponseData(for: cacheKey) else { return nil }
+        return try? JSONDecoder().decode(Response.self, from: data)
+    }
+
+    func requestCached<Response: Decodable>(
+        _ path: String,
+        token: String? = nil,
+        query: [URLQueryItem] = [],
+        headers: [String: String] = [:],
+        cacheKey: String
+    ) async throws -> Response {
+        try await request(
+            path,
+            method: .get,
+            bodyData: nil,
+            token: token,
+            query: query,
+            headers: headers,
+            responseCacheKey: cacheKey
+        )
+    }
+
+    func storeCachedResponse<Value: Encodable>(_ value: Value, for cacheKey: String) {
+        guard let data = try? JSONEncoder().encode(value) else { return }
+        Self.storeCachedResponseData(data, for: cacheKey)
+    }
+
+    func removeCachedResponse(for cacheKey: String) {
+        try? FileManager.default.removeItem(at: Self.responseCacheURL(for: cacheKey))
+    }
+
+    func clearResponseCache() {
+        Self.clearCachedResponses()
+    }
+
     func request<Response: Decodable>(
         _ path: String,
         method: HTTPMethod = .get,
@@ -48,7 +85,7 @@ final class APIClient: @unchecked Sendable {
         query: [URLQueryItem] = [],
         headers: [String: String] = [:]
     ) async throws -> Response {
-        try await request(path, method: method, bodyData: nil, token: token, query: query, headers: headers)
+        try await request(path, method: method, bodyData: nil, token: token, query: query, headers: headers, responseCacheKey: nil)
     }
 
     func request<Response: Decodable, Body: Encodable>(
@@ -60,7 +97,7 @@ final class APIClient: @unchecked Sendable {
         headers: [String: String] = [:]
     ) async throws -> Response {
         let data = try encoder.encode(body)
-        return try await request(path, method: method, bodyData: data, token: token, query: query, headers: headers)
+        return try await request(path, method: method, bodyData: data, token: token, query: query, headers: headers, responseCacheKey: nil)
     }
 
     private func request<Response: Decodable>(
@@ -69,7 +106,8 @@ final class APIClient: @unchecked Sendable {
         bodyData: Data?,
         token: String?,
         query: [URLQueryItem],
-        headers: [String: String]
+        headers: [String: String],
+        responseCacheKey: String?
     ) async throws -> Response {
         let attempts = method == .get ? 2 : 1
         var lastError: Error?
@@ -98,7 +136,9 @@ final class APIClient: @unchecked Sendable {
                     throw APIError(message: message, statusCode: http.statusCode, retryAfter: retryAfter)
                 }
                 do {
-                    return try decoder.decode(Response.self, from: data)
+                    let decoded = try decoder.decode(Response.self, from: data)
+                    if let responseCacheKey { Self.storeCachedResponseData(data, for: responseCacheKey) }
+                    return decoded
                 } catch {
                     throw APIError(message: "服务器数据格式与当前客户端不兼容", statusCode: http.statusCode, retryAfter: nil)
                 }
@@ -156,6 +196,37 @@ final class APIClient: @unchecked Sendable {
         guard let value, !value.isEmpty else { return nil }
         if let absolute = URL(string: value), absolute.scheme != nil { return absolute }
         return URL(string: value, relativeTo: baseURL)?.absoluteURL
+    }
+
+    private static let responseCacheDirectory: URL = {
+        let root = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+        let directory = root.appendingPathComponent("TijingResponseCache", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }()
+
+    private static func responseCacheURL(for key: String) -> URL {
+        let digest = SHA256.hash(data: Data(key.utf8)).map { String(format: "%02x", $0) }.joined()
+        return responseCacheDirectory.appendingPathComponent(digest).appendingPathExtension("json")
+    }
+
+    private static func readCachedResponseData(for key: String) -> Data? {
+        try? Data(contentsOf: responseCacheURL(for: key), options: [.mappedIfSafe])
+    }
+
+    private static func storeCachedResponseData(_ data: Data, for key: String) {
+        let url = responseCacheURL(for: key)
+        Task.detached(priority: .utility) {
+            try? data.write(to: url, options: .atomic)
+        }
+    }
+
+    private static func clearCachedResponses() {
+        guard let urls = try? FileManager.default.contentsOfDirectory(
+            at: responseCacheDirectory, includingPropertiesForKeys: nil
+        ) else { return }
+        for url in urls { try? FileManager.default.removeItem(at: url) }
     }
 
     private static func errorMessage(from data: Data) -> String? {
