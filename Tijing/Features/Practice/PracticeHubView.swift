@@ -102,18 +102,6 @@ struct PracticeHubView: View {
                             .buttonStyle(TijingPressableCardStyle())
                             .tijingTactileLink()
 
-                            NavigationLink {
-                                PracticeCatalogView(initialMode: .exam)
-                            } label: {
-                                TijingActionTile(
-                                    title: "模拟考试",
-                                    subtitle: "完整作答后统一交卷",
-                                    systemImage: "doc.text.magnifyingglass",
-                                    tint: TijingDesign.mint
-                                )
-                            }
-                            .buttonStyle(TijingPressableCardStyle())
-                            .tijingTactileLink()
                         }
                     }
 

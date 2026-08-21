@@ -9,134 +9,182 @@ struct ProfileView: View {
     @State private var stats: StatsResponse?
     @State private var confirmLogout = false
 
-    private var metricColumns: [GridItem] {
-        if dynamicTypeSize.isAccessibilitySize { return [GridItem(.flexible())] }
-        return [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
+    private var statColumns: [GridItem] {
+        dynamicTypeSize.isAccessibilitySize ? [GridItem(.flexible())] : [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
     }
 
     var body: some View {
         ZStack {
             TijingPageBackground()
-
             if let user = session.user {
                 ScrollView {
-                    LazyVStack(spacing: TijingDesign.sectionSpacing) {
-                        VStack(alignment: .leading, spacing: 7) {
-                            Text("我的")
-                                .font(.system(.largeTitle, design: .rounded, weight: .heavy))
-                            Text("账号、学习和对战，都收在这里。")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                        profileHero(user)
-                        metricsSection(user)
-                        accountSection
+                    LazyVStack(spacing: 25) {
+                        header
+                        identityCard(user)
+                        statusStamps(user)
                         activitySection
+                        accountSection
                         supportSection
                         logoutButton
                     }
                     .padding(.horizontal, TijingDesign.pageHorizontalPadding)
-                    .padding(.top, 10)
-                    .padding(.bottom, 30)
+                    .padding(.top, 8)
+                    .padding(.bottom, 34)
                 }
                 .refreshable { await refresh() }
             } else {
-                signedOutView
-                    .padding(.horizontal, TijingDesign.pageHorizontalPadding)
+                signedOutView.padding(.horizontal, TijingDesign.pageHorizontalPadding)
             }
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: session.user?.id) { await refresh() }
         .confirmationDialog("退出当前账号？", isPresented: $confirmLogout, titleVisibility: .visible) {
-            Button("退出登录", role: .destructive) {
-                session.logout()
-            }
+            Button("退出登录", role: .destructive) { session.logout() }
             Button("取消", role: .cancel) { }
         } message: {
             Text("本机登录状态会被清除；服务器上的刷题、收藏、好友和对战记录不会删除。")
         }
     }
 
-    private func profileHero(_ user: User) -> some View {
-        NavigationLink {
-            PublicProfileView(userID: user.id)
-        } label: {
-            TijingHeroCard(
-                gradient: LinearGradient(
-                    colors: [Color(red: 0.12, green: 0.15, blue: 0.28), TijingDesign.indigo, Color.accentColor],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            ) {
-                HStack(spacing: 16) {
-                    RemoteAvatar(urlString: user.avatarURL, name: user.nickname, size: 76)
-                        .overlay {
-                            Circle().stroke(.white.opacity(0.35), lineWidth: 2)
-                        }
+    private var header: some View {
+        HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text("我的")
+                    .font(.system(.largeTitle, design: .rounded, weight: .heavy))
+                Text("资料、记录和设置，都收在这里。")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            TijingStickerIcon(systemImage: "person.crop.circle.fill", tint: TijingDesign.indigo, background: TijingDesign.sky, size: 52, rotation: 6)
+        }
+    }
 
-                    VStack(alignment: .leading, spacing: 6) {
+    private func identityCard(_ user: User) -> some View {
+        TijingPaperCard(tint: TijingDesign.peach, rotation: -0.25) {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(alignment: .top, spacing: 15) {
+                    ZStack(alignment: .bottomTrailing) {
+                        RemoteAvatar(urlString: user.avatarURL, name: user.nickname, size: 82)
+                            .overlay { Circle().stroke(.white.opacity(0.85), lineWidth: 3) }
+                            .shadow(color: .black.opacity(0.07), radius: 10, y: 5)
+                        TijingFloatingSparkles(tint: TijingDesign.amber)
+                            .offset(x: 8, y: 6)
+                    }
+
+                    VStack(alignment: .leading, spacing: 7) {
                         HStack(spacing: 7) {
                             Text(user.nickname)
-                                .font(.title2.bold())
+                                .font(.system(.title2, design: .rounded, weight: .bold))
                                 .lineLimit(1)
                             if user.isAdmin == true {
                                 Image(systemName: "checkmark.seal.fill")
-                                    .foregroundStyle(TijingDesign.cyan)
+                                    .foregroundStyle(TijingDesign.indigo)
                             }
                         }
-                        Text("\(user.rank) · \(user.rating) 竞点")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.white.opacity(0.80))
-                            .monospacedDigit()
-                        if let bio = user.bio, !bio.isEmpty {
-                            Text(bio)
-                                .font(.caption)
-                                .foregroundStyle(.white.opacity(0.68))
-                                .lineLimit(2)
-                        } else {
-                            Text("给自己留一句上岸宣言")
-                                .font(.caption)
-                                .foregroundStyle(.white.opacity(0.62))
+
+                        Text(user.bio.flatMap { $0.isEmpty ? nil : $0 } ?? "写一句属于自己的介绍吧。")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+
+                        HStack(spacing: 7) {
+                            TijingMicroBadge(title: user.rank, systemImage: "seal.fill", tint: TijingDesign.indigo)
+                            TijingMicroBadge(title: "\(user.rating) 竞点", systemImage: "sparkles", tint: TijingDesign.amber)
                         }
                     }
-
-                    Spacer(minLength: 6)
-                    Image(systemName: "chevron.right")
-                        .font(.caption.bold())
-                        .foregroundStyle(.white.opacity(0.65))
+                    Spacer(minLength: 0)
                 }
-                .foregroundStyle(.white)
+
+                Divider().opacity(0.28)
+
+                HStack(spacing: 0) {
+                    identityMetric("\(stats?.questions ?? user.questions ?? 0)", "已刷题", "checkmark.circle.fill", TijingDesign.indigo)
+                    Divider().frame(height: 42)
+                    identityMetric(TijingFormat.percent(stats?.accuracy ?? user.accuracy), "正确率", "scope", TijingDesign.mint)
+                    Divider().frame(height: 42)
+                    identityMetric("\(stats?.wins ?? user.wins)胜", "排位胜场", "trophy.fill", TijingDesign.amber)
+                }
+
+                NavigationLink {
+                    EditProfileView()
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "pencil.line")
+                            .font(.subheadline.weight(.semibold))
+                            .frame(width: 30, height: 30)
+                            .background(.white.opacity(0.58), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                        Text("编辑个人资料")
+                            .font(.subheadline.weight(.semibold))
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption.bold())
+                            .foregroundStyle(.tertiary)
+                    }
+                    .foregroundStyle(.primary)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .tijingTactileLink()
             }
         }
-        .buttonStyle(TijingPressableCardStyle())
-        .tijingTactileLink()
     }
 
-    private func metricsSection(_ user: User) -> some View {
+    private func identityMetric(_ value: String, _ label: String, _ icon: String, _ tint: Color) -> some View {
+        VStack(spacing: 5) {
+            Image(systemName: icon)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(tint)
+            Text(value)
+                .font(.system(.headline, design: .rounded, weight: .bold))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func statusStamps(_ user: User) -> some View {
         VStack(spacing: 12) {
-            TijingSectionHeading("这一阶段")
-            LazyVGrid(columns: metricColumns, spacing: 10) {
-                TijingMetricTile(
-                    value: "\(stats?.questions ?? user.questions ?? 0)",
-                    title: "已刷题量",
-                    systemImage: "checkmark.circle.fill",
-                    tint: .accentColor
-                )
-                TijingMetricTile(
-                    value: TijingFormat.percent(stats?.accuracy ?? user.accuracy),
-                    title: "正确率",
-                    systemImage: "scope",
-                    tint: TijingDesign.mint
-                )
-                TijingMetricTile(
-                    value: "\(stats?.wins ?? user.wins)胜 \(stats?.losses ?? user.losses)负",
-                    title: "排位战绩",
-                    systemImage: "trophy.fill",
-                    tint: TijingDesign.amber
-                )
+            TijingSectionHeading("最近的你", subtitle: "三枚小状态章，快速看一眼就够了")
+            LazyVGrid(columns: statColumns, spacing: 10) {
+                stamp(value: "\(stats?.questions ?? user.questions ?? 0)", label: "已刷题量", icon: "book.closed.fill", tint: TijingDesign.sky)
+                stamp(value: TijingFormat.percent(stats?.accuracy ?? user.accuracy), label: "正确率", icon: "checkmark.seal.fill", tint: TijingDesign.sage)
+                stamp(value: "\(stats?.wins ?? user.wins)胜 \(stats?.losses ?? user.losses)负", label: "排位战绩", icon: "medal.fill", tint: TijingDesign.butter)
+            }
+        }
+    }
+
+    private func stamp(value: String, label: String, icon: String, tint: Color) -> some View {
+        TijingPaperCard(tint: tint) {
+            VStack(alignment: .leading, spacing: 10) {
+                TijingStickerIcon(systemImage: icon, tint: TijingDesign.ink.opacity(0.70), background: tint, size: 38, rotation: -5, sparkle: false)
+                Text(value)
+                    .font(.system(.title3, design: .rounded, weight: .bold))
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                Text(label)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, minHeight: 94, alignment: .leading)
+        }
+    }
+
+    private var activitySection: some View {
+        VStack(spacing: 12) {
+            TijingSectionHeading("记录与社交")
+            TijingSettingsGroup {
+                navRow("历史战绩", subtitle: "回看对局和逐题详情", icon: "clock.arrow.circlepath", tint: TijingDesign.lilac) { BattleHistoryView() }
+                Divider().padding(.leading, 62)
+                navRow("通知中心", subtitle: "好友、挑战和系统消息", icon: "bell.fill", tint: TijingDesign.rose, trailing: session.unreadNotifications > 0 ? "\(session.unreadNotifications)" : nil) { NotificationsView() }
+                Divider().padding(.leading, 62)
+                navRow("好友与黑名单", subtitle: "好友状态、邀请和管理", icon: "person.2.fill", tint: TijingDesign.sky) { FriendsView() }
             }
         }
     }
@@ -145,63 +193,7 @@ struct ProfileView: View {
         VStack(spacing: 12) {
             TijingSectionHeading("账号")
             TijingSettingsGroup {
-                NavigationLink {
-                    EditProfileView()
-                } label: {
-                    TijingSettingsRow("编辑资料", subtitle: "头像、昵称、简介与性别", systemImage: "person.crop.circle.badge.pencil", tint: TijingDesign.indigo)
-                }
-                .buttonStyle(.plain)
-                .tijingTactileLink()
-
-                Divider().padding(.leading, 62)
-
-                NavigationLink {
-                    AccountSecurityView()
-                } label: {
-                    TijingSettingsRow("账号与安全", subtitle: "密码、邮箱与登录安全", systemImage: "lock.shield.fill", tint: TijingDesign.mint)
-                }
-                .buttonStyle(.plain)
-                .tijingTactileLink()
-            }
-        }
-    }
-
-    private var activitySection: some View {
-        VStack(spacing: 12) {
-            TijingSectionHeading("记录与社交")
-            TijingSettingsGroup {
-                NavigationLink {
-                    BattleHistoryView()
-                } label: {
-                    TijingSettingsRow("历史战绩", systemImage: "clock.arrow.circlepath", tint: TijingDesign.violet)
-                }
-                .buttonStyle(.plain)
-                .tijingTactileLink()
-
-                Divider().padding(.leading, 62)
-
-                NavigationLink {
-                    NotificationsView()
-                } label: {
-                    TijingSettingsRow(
-                        "通知中心",
-                        systemImage: "bell.fill",
-                        tint: TijingDesign.coral,
-                        trailing: session.unreadNotifications > 0 ? "\(session.unreadNotifications)" : nil
-                    )
-                }
-                .buttonStyle(.plain)
-                .tijingTactileLink()
-
-                Divider().padding(.leading, 62)
-
-                NavigationLink {
-                    FriendsView()
-                } label: {
-                    TijingSettingsRow("好友与黑名单", systemImage: "person.2.fill", tint: TijingDesign.cyan)
-                }
-                .buttonStyle(.plain)
-                .tijingTactileLink()
+                navRow("账号与安全", subtitle: "密码、邮箱与登录安全", icon: "lock.shield.fill", tint: TijingDesign.sage) { AccountSecurityView() }
             }
         }
     }
@@ -210,35 +202,21 @@ struct ProfileView: View {
         VStack(spacing: 12) {
             TijingSectionHeading("关于")
             TijingSettingsGroup {
-                NavigationLink {
-                    SuggestionView()
-                } label: {
-                    TijingSettingsRow("功能建议", systemImage: "text.bubble.fill", tint: TijingDesign.amber)
-                }
-                .buttonStyle(.plain)
-                .tijingTactileLink()
-
+                navRow("功能建议", subtitle: "告诉我们哪里还能更顺手", icon: "text.bubble.fill", tint: TijingDesign.butter) { SuggestionView() }
                 Divider().padding(.leading, 62)
-
-                NavigationLink {
-                    TermsView()
-                } label: {
-                    TijingSettingsRow("使用条款", systemImage: "doc.text.fill", tint: .secondary)
-                }
-                .buttonStyle(.plain)
-                .tijingTactileLink()
-
+                navRow("使用条款", subtitle: nil, icon: "doc.text.fill", tint: .secondary) { TermsView() }
                 Divider().padding(.leading, 62)
-
-                NavigationLink {
-                    PrivacyView()
-                } label: {
-                    TijingSettingsRow("隐私政策", systemImage: "hand.raised.fill", tint: .secondary)
-                }
-                .buttonStyle(.plain)
-                .tijingTactileLink()
+                navRow("隐私政策", subtitle: nil, icon: "hand.raised.fill", tint: .secondary) { PrivacyView() }
             }
         }
+    }
+
+    private func navRow<Destination: View>(_ title: String, subtitle: String?, icon: String, tint: Color, trailing: String? = nil, @ViewBuilder destination: () -> Destination) -> some View {
+        NavigationLink(destination: destination()) {
+            TijingSettingsRow(title, subtitle: subtitle, systemImage: icon, tint: tint, trailing: trailing)
+        }
+        .buttonStyle(.plain)
+        .tijingTactileLink()
     }
 
     private var logoutButton: some View {
@@ -258,29 +236,27 @@ struct ProfileView: View {
     private var signedOutView: some View {
         VStack(spacing: 22) {
             Spacer(minLength: 60)
-            TijingHeroCard {
-                VStack(alignment: .leading, spacing: 14) {
-                    Image(systemName: "person.crop.circle.badge.plus")
-                        .font(.system(size: 40, weight: .semibold))
+            TijingPaperCard(tint: TijingDesign.sky, rotation: -0.5) {
+                VStack(alignment: .leading, spacing: 15) {
+                    TijingStickerIcon(systemImage: "person.crop.circle.badge.plus", tint: TijingDesign.indigo, background: TijingDesign.sky, size: 56)
                     Text("登录后，这里才是你的")
                         .font(.title2.bold())
                     Text("同步刷题、错题、收藏、好友和排位记录。")
                         .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.78))
+                        .foregroundStyle(.secondary)
                     Button {
                         Haptics.medium()
                         showingAuth = true
                     } label: {
                         Text("登录 / 注册")
                             .font(.headline)
-                            .foregroundStyle(.black)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
-                            .background(.white, in: Capsule())
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 18)
+                            .padding(.vertical, 11)
+                            .background(TijingDesign.ink, in: Capsule())
                     }
                     .buttonStyle(TijingPressableCardStyle())
                 }
-                .foregroundStyle(.white)
             }
             Spacer()
         }
@@ -288,10 +264,7 @@ struct ProfileView: View {
 
     @MainActor
     private func refresh() async {
-        guard let token = session.token else {
-            stats = nil
-            return
-        }
+        guard let token = session.token else { stats = nil; return }
         try? await session.refreshUser()
         stats = try? await session.api.request("/api/stats/me", token: token)
     }
@@ -308,35 +281,66 @@ struct EditProfileView: View {
     @State private var error: String?
 
     var body: some View {
-        Form {
-            Section("头像") {
-                HStack {
-                    RemoteAvatar(urlString: session.user?.avatarURL, name: session.user?.nickname ?? "题", size: 64)
-                    Spacer()
-                    PhotosPicker(selection: $item, matching: .images) {
-                        Label("选择照片", systemImage: "photo")
+        ZStack {
+            TijingPageBackground()
+            ScrollView {
+                VStack(spacing: 18) {
+                    TijingPastelCard(tint: TijingDesign.peach) {
+                        VStack(spacing: 14) {
+                            RemoteAvatar(urlString: session.user?.avatarURL, name: session.user?.nickname ?? "题", size: 92)
+                                .overlay { Circle().stroke(.white.opacity(0.75), lineWidth: 3) }
+                            PhotosPicker(selection: $item, matching: .images) {
+                                Label("更换头像", systemImage: "photo")
+                                    .font(.subheadline.weight(.semibold))
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 9)
+                                    .background(.white.opacity(0.48), in: Capsule())
+                            }
+                            .buttonStyle(.plain)
+                            if session.user?.avatarReviewStatus == "pending" {
+                                Text("新头像正在审核，审核通过前继续显示当前头像。")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.center)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+
+                    TijingFieldSurface("昵称") {
+                        TextField("2～8 个字符", text: $nickname)
+                            .textContentType(.nickname)
+                            .onChange(of: nickname) { _, value in
+                                if value.count > 8 { nickname = String(value.prefix(8)) }
+                            }
+                    }
+
+                    TijingFieldSurface("个人简介") {
+                        TextField("写一句简单的介绍", text: $bio, axis: .vertical)
+                            .lineLimit(3...6)
+                        Text("\(bio.count)/50")
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                    }
+
+                    TijingFieldSurface("性别") {
+                        Picker("性别", selection: $gender) {
+                            ForEach(["保密", "男", "女"], id: \.self) { Text($0).tag($0) }
+                        }
+                        .pickerStyle(.segmented)
+                    }
+
+                    if let error {
+                        Label(error, systemImage: "exclamationmark.circle.fill")
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
-                if session.user?.avatarReviewStatus == "pending" {
-                    Text("新头像正在审核，审核通过前继续显示当前头像。")
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-            }
-            Section("资料") {
-                TextField("昵称", text: $nickname)
-                    .onChange(of: nickname) { _, value in
-                        if value.count > 8 { nickname = String(value.prefix(8)) }
-                    }
-                TextField("简介", text: $bio, axis: .vertical).lineLimit(2...4)
-                Picker("性别", selection: $gender) {
-                    ForEach(["保密", "男", "女"], id: \.self) { Text($0).tag($0) }
-                }
-            }
-            if let error {
-                Section {
-                    Label(error, systemImage: "exclamationmark.circle.fill")
-                        .foregroundStyle(.red)
-                }
+                .padding(.horizontal, TijingDesign.pageHorizontalPadding)
+                .padding(.top, 10)
+                .padding(.bottom, 30)
             }
         }
         .navigationTitle("编辑资料")
@@ -344,11 +348,9 @@ struct EditProfileView: View {
         .sensoryFeedback(.selection, trigger: gender)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
-                Button("保存") {
-                    Task { await save() }
-                }
-                .bold()
-                .disabled(busy || nickname.count < 2 || nickname.count > 8 || bio.count > 50)
+                Button(busy ? "保存中…" : "保存") { Task { await save() } }
+                    .bold()
+                    .disabled(busy || nickname.count < 2 || nickname.count > 8 || bio.count > 50)
             }
         }
         .task {

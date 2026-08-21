@@ -9,7 +9,9 @@ struct PracticeSessionView: View {
     @State private var correctionTarget: CorrectionTarget?
 
     var body: some View {
-        Group {
+        ZStack {
+            TijingPageBackground()
+            Group {
             if store.isLoading && store.questions.isEmpty {
                 ProgressView("正在读取题组")
             } else if let error = store.error, store.questions.isEmpty {
@@ -22,6 +24,7 @@ struct PracticeSessionView: View {
                 }
             } else if let question = store.currentQuestion {
                 questionContent(question)
+            }
             }
         }
         .navigationTitle(store.mode.title)
@@ -40,12 +43,10 @@ struct PracticeSessionView: View {
                     Text(store.progressText).font(.headline.monospacedDigit())
                 }
                 ToolbarItemGroup(placement: .topBarTrailing) {
-                    if store.mode != .exam {
-                        Button { Task { await store.toggleFavorite() } } label: {
-                            Image(systemName: store.currentQuestion?.favorite == true ? "star.fill" : "star")
-                        }
-                        .accessibilityLabel(store.currentQuestion?.favorite == true ? "取消收藏" : "收藏本题")
+                    Button { Task { await store.toggleFavorite() } } label: {
+                        Image(systemName: store.currentQuestion?.favorite == true ? "star.fill" : "star")
                     }
+                    .accessibilityLabel(store.currentQuestion?.favorite == true ? "取消收藏" : "收藏本题")
                     Button {
                         if let id = store.currentQuestion?.id { correctionTarget = CorrectionTarget(id: id) }
                     } label: { Image(systemName: "flag") }
@@ -95,25 +96,56 @@ struct PracticeSessionView: View {
     private func questionContent(_ question: Question) -> some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 18) {
-                ProgressView(value: Double(store.index + 1), total: Double(max(store.questions.count, 1)))
-                    .tint(.accentColor)
-                    .accessibilityLabel("答题进度")
-                    .accessibilityValue(store.progressText)
-
-                if let material = question.material, !material.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text(material)
-                        .font(.body)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(16)
-                        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    QuestionMediaStrip(urls: question.media?.material ?? [])
+                TijingPaperCard(tint: TijingDesign.sky) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 12) {
+                            TijingStickerIcon(systemImage: "pencil.and.outline", tint: TijingDesign.indigo, background: TijingDesign.sky, size: 42, rotation: -6, sparkle: false)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(store.mode.title)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                                Text("第 \(store.index + 1) 题")
+                                    .font(.title3.bold())
+                            }
+                            Spacer()
+                            TijingMicroBadge(title: store.progressText, systemImage: "circle.grid.3x3.fill", tint: TijingDesign.indigo)
+                        }
+                        ProgressView(value: Double(store.index + 1), total: Double(max(store.questions.count, 1)))
+                            .tint(TijingDesign.indigo)
+                            .accessibilityLabel("答题进度")
+                            .accessibilityValue(store.progressText)
+                    }
                 }
 
-                Text(question.stem)
-                    .font(.title3.weight(.semibold))
-                    .textSelection(.disabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                QuestionMediaStrip(urls: question.media?.stem ?? [])
+                if let material = question.material, !material.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    TijingPaperCard(tint: TijingDesign.butter) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Label("材料", systemImage: "doc.text.fill")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(TijingDesign.amber)
+                            Text(material)
+                                .font(.body)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            QuestionMediaStrip(urls: question.media?.material ?? [])
+                        }
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "text.quote")
+                            .font(.caption.bold())
+                            .foregroundStyle(TijingDesign.violet)
+                        Text("题目")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(question.stem)
+                        .font(.title3.weight(.semibold))
+                        .textSelection(.disabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    QuestionMediaStrip(urls: question.media?.stem ?? [])
+                }
 
                 VStack(spacing: 12) {
                     ForEach(question.options.indices, id: \.self) { index in
@@ -158,7 +190,7 @@ struct PracticeSessionView: View {
                 } label: {
                     HStack {
                         if store.isSubmitting { ProgressView().controlSize(.small) }
-                        Text(store.mode == .exam ? "交卷" : "提交本组")
+                        Text("提交本组")
                             .fontWeight(.semibold)
                         Spacer()
                         Image(systemName: "checkmark.seal")
@@ -168,7 +200,7 @@ struct PracticeSessionView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .disabled(store.isSubmitting)
-            } else if question.isMultiple && store.mode != .exam && store.feedbackForCurrent() == nil {
+            } else if question.isMultiple && store.feedbackForCurrent() == nil {
                 Button {
                     Task { await store.confirmMultiple() }
                 } label: {
@@ -213,14 +245,7 @@ struct PracticeSessionView: View {
 
                 Spacer(minLength: 12)
 
-                if store.mode == .exam, store.canGoNext {
-                    Button {
-                        store.next()
-                    } label: {
-                        Label("下一题", systemImage: "chevron.right")
-                    }
-                    .buttonStyle(.borderedProminent)
-                } else if store.isImmediate, store.feedbackForCurrent() != nil, store.canGoNext {
+                if store.isImmediate, store.feedbackForCurrent() != nil, store.canGoNext {
                     Button {
                         store.next()
                     } label: {
@@ -329,31 +354,67 @@ struct QuestionCorrectionView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("问题类型") {
-                    Picker("问题类型", selection: $category) {
-                        ForEach(categories, id: \.0) { value, title in Text(title).tag(value) }
-                    }
-                }
-                Section("补充说明（可选）") {
-                    TextField("例如：正确答案应该是 B，解析中的法条引用有误……", text: $content, axis: .vertical)
-                        .lineLimit(3...6)
-                        .onChange(of: content) { _, value in
-                            if value.count > 500 { content = String(value.prefix(500)) }
+            ZStack {
+                TijingPageBackground()
+                ScrollView {
+                    VStack(spacing: 16) {
+                        TijingPaperCard(tint: TijingDesign.rose, rotation: -0.25) {
+                            HStack(spacing: 13) {
+                                TijingStickerIcon(systemImage: "exclamationmark.bubble.fill", tint: TijingDesign.coral, background: TijingDesign.rose, size: 48, rotation: -7)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text("题目纠错")
+                                        .font(.headline)
+                                    Text("把问题描述清楚即可，管理员复核后再处理。")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer(minLength: 0)
+                            }
                         }
-                }
-                if let error { Text(error).foregroundStyle(.red) }
-                Section {
-                    Text("只提交问题，不会自动修改题目；管理员复核后再处理。")
-                        .font(.footnote).foregroundStyle(.secondary)
+
+                        TijingFieldSurface("问题类型") {
+                            Picker("问题类型", selection: $category) {
+                                ForEach(categories, id: \.0) { value, title in Text(title).tag(value) }
+                            }
+                            .pickerStyle(.menu)
+                        }
+
+                        TijingFieldSurface("补充说明（可选）") {
+                            TextField("例如：正确答案应该是 B，解析中的法条引用有误……", text: $content, axis: .vertical)
+                                .lineLimit(4...7)
+                                .onChange(of: content) { _, value in
+                                    if value.count > 500 { content = String(value.prefix(500)) }
+                                }
+                            Text("\(content.count)/500")
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .trailing)
+                        }
+
+                        if let error {
+                            Label(error, systemImage: "exclamationmark.circle.fill")
+                                .font(.footnote)
+                                .foregroundStyle(.red)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+
+                        Label("提交后不会自动改题，会先进入人工复核。", systemImage: "checkmark.shield")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(.horizontal, TijingDesign.pageHorizontalPadding)
+                    .padding(.top, 10)
+                    .padding(.bottom, 26)
                 }
             }
-            .navigationTitle("题目纠错")
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
+            .sensoryFeedback(.selection, trigger: category)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("提交") { Task { await submit() } }.disabled(busy)
+                    Button("提交") { Task { await submit() } }.bold().disabled(busy)
                 }
             }
         }
@@ -409,8 +470,9 @@ private struct OptionRow: View {
             QuestionMediaStrip(urls: media)
         }
         .padding(14)
-        .background(background, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(border, lineWidth: state == .normal ? 0.5 : 1.5))
+        .background(background, in: RoundedRectangle(cornerRadius: 19, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 19).stroke(border, lineWidth: state == .normal ? 0.7 : 1.5))
+        .shadow(color: state == .normal ? Color.black.opacity(0.025) : Color.clear, radius: 7, y: 3)
         .contentShape(Rectangle())
         .onTapGesture { if !excluded { tap() } }
         .onLongPressGesture(minimumDuration: 0.45, perform: longPress)
@@ -421,7 +483,7 @@ private struct OptionRow: View {
 
     private var background: Color {
         switch state {
-        case .normal: .clear
+        case .normal: Color(uiColor: .secondarySystemGroupedBackground)
         case .selected: Color.accentColor.opacity(0.10)
         case .correct: Color.green.opacity(0.12)
         case .wrong: Color.red.opacity(0.10)
@@ -473,8 +535,9 @@ private struct FeedbackCard: View {
             .font(.caption).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .padding(17)
+        .background((feedback.correct ? TijingDesign.sage : TijingDesign.rose).opacity(0.24), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder((feedback.correct ? TijingDesign.mint : TijingDesign.coral).opacity(0.18)) }
     }
 
     private func answerLetters(_ values: [Int]) -> String {
@@ -509,35 +572,77 @@ private struct PracticeBatchResultView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                Section {
-                    HStack {
-                        VStack(alignment: .leading) {
-                            Text("\(result.score)").font(.system(size: 46, weight: .black, design: .rounded)).monospacedDigit()
-                            Text("得分").foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Text("\(result.correct) / \(result.total) 正确")
-                            .font(.headline.monospacedDigit())
-                    }
-                    .padding(.vertical, 8)
-                }
-                Section("答题详情") {
-                    ForEach(Array(result.details.enumerated()), id: \.element.id) { offset, item in
-                        VStack(alignment: .leading, spacing: 7) {
-                            Label("第 \(offset + 1) 题 · \(item.correct ? "正确" : "错误")", systemImage: item.correct ? "checkmark.circle.fill" : "xmark.circle.fill")
-                                .foregroundStyle(item.correct ? Color.green : Color.red)
-                            Text(item.stem ?? question(item.questionID)?.stem ?? "题目")
-                                .font(.subheadline).lineLimit(3)
-                            if !item.correct, let explanation = item.explanation, !explanation.isEmpty {
-                                Text(explanation).font(.caption).foregroundStyle(.secondary).lineLimit(4)
+            ZStack {
+                TijingPageBackground()
+                ScrollView {
+                    VStack(spacing: 18) {
+                        TijingPaperCard(tint: result.score >= 60 ? TijingDesign.sage : TijingDesign.rose, rotation: -0.25) {
+                            HStack(spacing: 16) {
+                                TijingStickerIcon(
+                                    systemImage: result.score >= 60 ? "checkmark.seal.fill" : "arrow.counterclockwise.circle.fill",
+                                    tint: result.score >= 60 ? TijingDesign.mint : TijingDesign.coral,
+                                    background: result.score >= 60 ? TijingDesign.sage : TijingDesign.rose,
+                                    size: 58,
+                                    rotation: -7
+                                )
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text("本组完成")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(.secondary)
+                                    Text("\(result.score) 分")
+                                        .font(.system(size: 42, weight: .bold, design: .rounded))
+                                        .monospacedDigit()
+                                    Text("\(result.correct) / \(result.total) 正确")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
                             }
                         }
-                        .padding(.vertical, 5)
+
+                        if result.details.isEmpty {
+                            TijingPaperCard(tint: TijingDesign.sky) {
+                                HStack(spacing: 12) {
+                                    TijingStickerIcon(systemImage: "sparkles", tint: TijingDesign.indigo, background: TijingDesign.sky, size: 44)
+                                    Text("这组没有需要回看的错题，状态不错。")
+                                        .font(.subheadline)
+                                    Spacer(minLength: 0)
+                                }
+                            }
+                        } else {
+                            VStack(spacing: 12) {
+                                TijingSectionHeading("需要再看一眼", subtitle: "结果页只保留错题和未作答题")
+                                ForEach(Array(result.details.enumerated()), id: \.element.id) { offset, item in
+                                    TijingPaperCard(tint: item.correct ? TijingDesign.sage : TijingDesign.rose) {
+                                        HStack(alignment: .top, spacing: 12) {
+                                            TijingStickerIcon(systemImage: item.correct ? "checkmark.circle.fill" : "xmark.circle.fill", tint: item.correct ? TijingDesign.mint : TijingDesign.coral, background: item.correct ? TijingDesign.sage : TijingDesign.rose, size: 38, rotation: -4, sparkle: false)
+                                            VStack(alignment: .leading, spacing: 6) {
+                                                Text("第 \(offset + 1) 题 · \(item.correct ? "正确" : "错误")")
+                                                    .font(.subheadline.weight(.semibold))
+                                                Text(item.stem ?? question(item.questionID)?.stem ?? "题目")
+                                                    .font(.subheadline)
+                                                    .lineLimit(3)
+                                                if !item.correct, let explanation = item.explanation, !explanation.isEmpty {
+                                                    Text(explanation)
+                                                        .font(.caption)
+                                                        .foregroundStyle(.secondary)
+                                                        .lineLimit(4)
+                                                }
+                                            }
+                                            Spacer(minLength: 0)
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
+                    .padding(.horizontal, TijingDesign.pageHorizontalPadding)
+                    .padding(.top, 12)
+                    .padding(.bottom, 28)
                 }
             }
             .navigationTitle("练习结果")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成", action: done).bold() } }
         }
     }

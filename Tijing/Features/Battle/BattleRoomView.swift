@@ -7,7 +7,9 @@ struct BattleRoomView: View {
     @State private var confirmExit = false
 
     var body: some View {
-        Group {
+        ZStack {
+            TijingPageBackground()
+            Group {
             if let state = store.state {
                 ScrollView {
                     LazyVStack(spacing: 18) {
@@ -41,6 +43,7 @@ struct BattleRoomView: View {
                 ContentUnavailableView("无法进入对战", systemImage: "wifi.exclamationmark", description: Text(error))
             } else {
                 ProgressView("正在连接对战")
+            }
             }
         }
         .navigationTitle("对战")
@@ -135,8 +138,9 @@ struct BattleRoomView: View {
                 .frame(maxWidth: .infinity)
             }
         }
-        .padding(14)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .padding(16)
+        .background(TijingDesign.sky.opacity(0.22), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Color.primary.opacity(0.05)) }
     }
 
     private func waitingCard(_ state: BattleState) -> some View {
@@ -162,23 +166,29 @@ struct BattleRoomView: View {
     private func battleQuestion(_ question: Question, state: BattleState) -> some View {
         let options = question.cleanedOptions
         return VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("当前题目")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text("第 \(state.questionIndex + 1) / \(state.total) 题")
-                    .font(.headline)
+            TijingPaperCard(tint: TijingDesign.sky) {
+                HStack(spacing: 12) {
+                    TijingStickerIcon(systemImage: "bolt.fill", tint: TijingDesign.indigo, background: TijingDesign.sky, size: 42, rotation: -6, sparkle: false)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("第 \(state.questionIndex + 1) / \(state.total) 题")
+                            .font(.headline)
+                        Text([question.subject, question.topic].filter { !$0.isEmpty }.joined(separator: " · "))
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                }
             }
 
-            Text([question.subject, question.topic].filter { !$0.isEmpty }.joined(separator: " · "))
-                .font(.caption).foregroundStyle(.secondary)
-
             if let material = question.material, !material.isEmpty {
-                Text(material)
-                    .font(.body)
-                    .padding(14)
-                    .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 14))
-                QuestionMediaStrip(urls: question.media?.material ?? [])
+                TijingPaperCard(tint: TijingDesign.butter) {
+                    VStack(alignment: .leading, spacing: 9) {
+                        Label("材料", systemImage: "doc.text.fill")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(TijingDesign.amber)
+                        Text(material).font(.body)
+                        QuestionMediaStrip(urls: question.media?.material ?? [])
+                    }
+                }
             }
             Text(question.stem).font(.title3.weight(.semibold))
             QuestionMediaStrip(urls: question.media?.stem ?? [])
@@ -202,8 +212,9 @@ struct BattleRoomView: View {
                         }
                     }
                     .padding(14)
-                    .background(battleOptionBackground(index, state: state), in: RoundedRectangle(cornerRadius: 15))
-                    .overlay(RoundedRectangle(cornerRadius: 15).stroke(battleOptionBorder(index, state: state), lineWidth: 1))
+                    .background(battleOptionBackground(index, state: state), in: RoundedRectangle(cornerRadius: 19, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 19, style: .continuous).stroke(battleOptionBorder(index, state: state), lineWidth: 1))
+                    .shadow(color: state.myFeedback == nil && store.selected == nil ? Color.black.opacity(0.025) : Color.clear, radius: 7, y: 3)
                 }
                 .buttonStyle(.plain)
                 .disabled(state.myFeedback != nil || store.selected != nil)
@@ -231,11 +242,11 @@ struct BattleRoomView: View {
 
     private func battleOptionBackground(_ index: Int, state: BattleState) -> Color {
         guard let feedback = state.myFeedback else {
-            return store.selected == index ? Color.accentColor.opacity(0.1) : .clear
+            return store.selected == index ? Color.accentColor.opacity(0.10) : Color(uiColor: .secondarySystemGroupedBackground)
         }
         if index == feedback.answer { return Color.green.opacity(0.12) }
         if index == feedback.picked && !feedback.correct { return Color.red.opacity(0.10) }
-        return .clear
+        return Color(uiColor: .secondarySystemGroupedBackground)
     }
 
     private func battleOptionBorder(_ index: Int, state: BattleState) -> Color {
@@ -277,7 +288,8 @@ struct BattleRoomView: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 24)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .background(outcomeTint(state.outcome).opacity(0.20), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .overlay { RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(outcomeColor(state.outcome).opacity(0.14)) }
 
             if let review = store.review {
                 battleReviewPanel(review)
@@ -286,6 +298,13 @@ struct BattleRoomView: View {
                     .font(.footnote)
             }
         }
+    }
+
+    private func outcomeTint(_ outcome: String?) -> Color {
+        let value = (outcome ?? "").lowercased()
+        if value.contains("win") || value.contains("victory") { return TijingDesign.sage }
+        if value.contains("lose") || value.contains("loss") { return TijingDesign.rose }
+        return TijingDesign.sky
     }
 
     private func finalPlayer(_ player: BattlePlayer) -> some View {

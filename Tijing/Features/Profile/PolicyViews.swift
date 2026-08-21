@@ -37,21 +37,53 @@ private struct PolicyArticleView: View {
     let sections: [(String, String)]
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                Text(title).font(.largeTitle.bold())
-                Text(introduction).font(.body)
-                ForEach(Array(sections.enumerated()), id: \.offset) { _, item in
-                    VStack(alignment: .leading, spacing: 7) {
-                        Text(item.0).font(.headline)
-                        Text(item.1).font(.body).foregroundStyle(.secondary)
+        ZStack {
+            TijingPageBackground()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    TijingPaperCard(tint: TijingDesign.sky, rotation: -0.2) {
+                        HStack(spacing: 13) {
+                            TijingStickerIcon(systemImage: title.contains("隐私") ? "hand.raised.fill" : "doc.text.fill", tint: TijingDesign.indigo, background: TijingDesign.sky, size: 50, rotation: -6)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(title)
+                                    .font(.title2.bold())
+                                Text(introduction)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                    }
+
+                    ForEach(Array(sections.enumerated()), id: \.offset) { index, item in
+                        TijingPaperCard(tint: sectionTint(index)) {
+                            HStack(alignment: .top, spacing: 12) {
+                                TijingStickerIcon(systemImage: sectionIcon(index), tint: TijingDesign.ink.opacity(0.70), background: sectionTint(index), size: 38, rotation: index.isMultiple(of: 2) ? -5 : 5, sparkle: false)
+                                VStack(alignment: .leading, spacing: 7) {
+                                    Text(item.0).font(.headline)
+                                    Text(item.1).font(.body).foregroundStyle(.secondary)
+                                }
+                                Spacer(minLength: 0)
+                            }
+                        }
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, TijingDesign.pageHorizontalPadding)
+                .padding(.top, 10)
+                .padding(.bottom, 30)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding()
         }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func sectionTint(_ index: Int) -> Color {
+        [TijingDesign.sky, TijingDesign.sage, TijingDesign.butter, TijingDesign.lilac, TijingDesign.peach][index % 5]
+    }
+
+    private func sectionIcon(_ index: Int) -> String {
+        ["person.crop.circle.fill", "book.closed.fill", "checkmark.shield.fill", "arrow.triangle.2.circlepath", "sparkles"][index % 5]
     }
 }

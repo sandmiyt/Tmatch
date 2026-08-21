@@ -114,7 +114,6 @@ struct PracticeCatalogView: View {
                 Text("错题重练").tag(PracticeMode.wrong)
                 Text("收藏练习").tag(PracticeMode.favorite)
                 Text("智能复习").tag(PracticeMode.smartReview)
-                Text("模拟考试").tag(PracticeMode.exam)
             }
             .labelsHidden()
             .pickerStyle(.menu)
@@ -242,7 +241,6 @@ struct PracticeCatalogView: View {
         case .wrong: return "只处理错题；答对后继续按现有规则移出错题。"
         case .favorite: return "把收藏过的重点集中练一遍。"
         case .smartReview: return "优先复习最容易遗忘、最值得投入时间的内容。"
-        case .exam: return "完整作答后统一交卷，更接近正式考试节奏。"
         }
     }
 
@@ -252,7 +250,6 @@ struct PracticeCatalogView: View {
         case .wrong: "arrow.counterclockwise.circle.fill"
         case .favorite: "star.fill"
         case .smartReview: "brain.head.profile"
-        case .exam: "doc.text.magnifyingglass"
         }
     }
 

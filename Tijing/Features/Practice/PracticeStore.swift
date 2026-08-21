@@ -13,8 +13,6 @@ struct PracticeResumeSnapshot: Codable {
     let feedback: [String: AnswerFeedback]
     let excluded: [String: [Int]]
     let elapsed: [String: Int]
-    let examID: Int?
-    let examTitle: String?
 }
 
 extension PracticeMode: Codable {}
@@ -64,9 +62,6 @@ final class PracticeSessionStore {
     var error: String?
     var batchResult: PracticeBatchResult?
     var showBatchResult = false
-    var examID: Int?
-    var examTitle: String?
-
     private let api: APIClient
     private let token: String
     private let userID: Int
@@ -84,8 +79,8 @@ final class PracticeSessionStore {
 
     var currentQuestion: Question? { questions.indices.contains(index) ? questions[index] : nil }
     var progressText: String { questions.isEmpty ? "0 / 0" : "\(index + 1) / \(questions.count)" }
-    var isImmediate: Bool { mode != .exam && settings.answerMode == "immediate" }
-    var isDeferred: Bool { mode == .exam || settings.answerMode == "submit" }
+    var isImmediate: Bool { settings.answerMode == "immediate" }
+    var isDeferred: Bool { settings.answerMode == "submit" }
     var unansweredCount: Int { questions.filter { (picks[String($0.id)] ?? []).isEmpty }.count }
     var canGoBack: Bool { index > 0 }
     var canGoNext: Bool { index + 1 < questions.count }
@@ -103,38 +98,31 @@ final class PracticeSessionStore {
         }
         if mode == .wrong, let saved { settings = saved.settings }
         do {
-            if mode == .exam {
-                let response: ExamCreateResponse = try await api.request("/api/exams", method: .post, body: ExamCreateBody(subject: subject, topic: topic, count: settings.questionCount, durationMinutes: 30), token: token)
-                examID = response.id
-                examTitle = response.title
-                questions = response.items.map { $0.preparedForDisplay() }
-            } else {
-                var query = [URLQueryItem(name: "mode", value: mode.rawValue), URLQueryItem(name: "count", value: String(settings.questionCount))]
-                let collection = mode == .wrong || mode == .favorite || mode == .smartReview
-                query.append(URLQueryItem(name: "prefer_unseen", value: String(settings.preferUnseen && !collection)))
-                if let subject, !subject.isEmpty { query.append(URLQueryItem(name: "subject", value: subject)) }
-                if let topic, !topic.isEmpty { query.append(URLQueryItem(name: "topic", value: topic)) }
-                if !collection && !(settings.difficultyMinRatio == 0 && settings.difficultyMaxRatio == 100) {
-                    query.append(URLQueryItem(name: "difficulty_min_ratio", value: String(settings.difficultyMinRatio)))
-                    query.append(URLQueryItem(name: "difficulty_max_ratio", value: String(settings.difficultyMaxRatio)))
-                }
-                let response: PracticeSetResponse = try await api.request("/api/practice/set", token: token, query: query)
-                let prepared = response.items.map { question in
-                    var value = question.preparedForDisplay()
-                    if mode == .favorite { value.favorite = true }
-                    return value
-                }
-                if mode == .wrong, let saved, !saved.questions.isEmpty {
-                    if prepared.isEmpty {
-                        PracticeResumeStore.clear(key: key)
-                        questions = []
-                    } else {
-                        reconcileWrongResume(saved, current: prepared)
-                        return
-                    }
+            var query = [URLQueryItem(name: "mode", value: mode.rawValue), URLQueryItem(name: "count", value: String(settings.questionCount))]
+            let collection = mode == .wrong || mode == .favorite || mode == .smartReview
+            query.append(URLQueryItem(name: "prefer_unseen", value: String(settings.preferUnseen && !collection)))
+            if let subject, !subject.isEmpty { query.append(URLQueryItem(name: "subject", value: subject)) }
+            if let topic, !topic.isEmpty { query.append(URLQueryItem(name: "topic", value: topic)) }
+            if !collection && !(settings.difficultyMinRatio == 0 && settings.difficultyMaxRatio == 100) {
+                query.append(URLQueryItem(name: "difficulty_min_ratio", value: String(settings.difficultyMinRatio)))
+                query.append(URLQueryItem(name: "difficulty_max_ratio", value: String(settings.difficultyMaxRatio)))
+            }
+            let response: PracticeSetResponse = try await api.request("/api/practice/set", token: token, query: query)
+            let prepared = response.items.map { question in
+                var value = question.preparedForDisplay()
+                if mode == .favorite { value.favorite = true }
+                return value
+            }
+            if mode == .wrong, let saved, !saved.questions.isEmpty {
+                if prepared.isEmpty {
+                    PracticeResumeStore.clear(key: key)
+                    questions = []
                 } else {
-                    questions = prepared
+                    reconcileWrongResume(saved, current: prepared)
+                    return
                 }
+            } else {
+                questions = prepared
             }
             index = 0
             startedAt = Date()
@@ -162,7 +150,7 @@ final class PracticeSessionStore {
             saveResume()
             if isImmediate {
                 await submitCurrent()
-            } else if mode != .exam {
+            } else {
                 await advanceAfterDeferredAnswer()
             }
         }
@@ -241,21 +229,7 @@ final class PracticeSessionStore {
         isSubmitting = true; error = nil
         defer { isSubmitting = false }
         do {
-            if mode == .exam, let examID {
-                var examAnswers: [String: PickValue] = [:]
-                for question in questions {
-                    let display = picks[String(question.id)] ?? []
-                    let original = question.originalPick(from: display)
-                    examAnswers[String(question.id)] = question.isMultiple ? .many(original) : (original.first.map(PickValue.one) ?? .many([]))
-                }
-                let examResponse: ExamSubmitResponse = try await api.request("/api/exams/\(examID)/submit", method: .post, body: ExamSubmitBody(answers: examAnswers), token: token)
-                let details = examResponse.details.map { item in
-                    PracticeBatchDetail(questionID: item.questionID, stem: nil, material: nil, options: nil, picked: item.picked, answer: item.answer, answers: item.answers, correct: item.correct, explanation: item.explanation, media: nil, favorite: nil)
-                }
-                batchResult = PracticeBatchResult(ok: true, correct: examResponse.correct, total: examResponse.total, score: examResponse.score, details: details)
-            } else {
-                batchResult = try await api.request("/api/practice/submit", method: .post, body: PracticeBatchSubmitBody(mode: mode.rawValue, answers: answers), token: token)
-            }
+            batchResult = try await api.request("/api/practice/submit", method: .post, body: PracticeBatchSubmitBody(mode: mode.rawValue, answers: answers), token: token)
             showBatchResult = true
             PracticeResumeStore.clear(key: resumeKey)
             Haptics.success()
@@ -384,7 +358,7 @@ final class PracticeSessionStore {
 
     private func saveResume() {
         guard !questions.isEmpty, mode != .smartReview, batchResult == nil else { return }
-        PracticeResumeStore.save(PracticeResumeSnapshot(savedAt: Date(), mode: mode, subject: subject, topic: topic, settings: settings, questions: questions, index: index, picks: picks, feedback: feedback, excluded: excluded, elapsed: elapsedByQuestion, examID: examID, examTitle: examTitle), key: resumeKey)
+        PracticeResumeStore.save(PracticeResumeSnapshot(savedAt: Date(), mode: mode, subject: subject, topic: topic, settings: settings, questions: questions, index: index, picks: picks, feedback: feedback, excluded: excluded, elapsed: elapsedByQuestion), key: resumeKey)
     }
 
     private func reconcileWrongResume(_ snapshot: PracticeResumeSnapshot, current: [Question]) {
@@ -420,48 +394,6 @@ final class PracticeSessionStore {
         feedback = snapshot.feedback
         excluded = snapshot.excluded
         elapsedByQuestion = snapshot.elapsed
-        examID = snapshot.examID
-        examTitle = snapshot.examTitle
         startedAt = Date()
-    }
-}
-
-struct ExamCreateBody: Encodable {
-    let subject: String?
-    let topic: String?
-    let count: Int
-    let durationMinutes: Int
-    enum CodingKeys: String, CodingKey { case subject, topic, count; case durationMinutes = "duration_minutes" }
-}
-
-struct ExamCreateResponse: Decodable {
-    let id: Int
-    let title: String
-    let durationMinutes: Int
-    let items: [Question]
-    enum CodingKeys: String, CodingKey { case id, title, items; case durationMinutes = "duration_minutes" }
-}
-
-struct ExamSubmitBody: Encodable {
-    let answers: [String: PickValue]
-}
-
-struct ExamSubmitResponse: Decodable {
-    let score: Int
-    let correct: Int
-    let total: Int
-    let details: [ExamSubmitDetail]
-}
-
-struct ExamSubmitDetail: Decodable {
-    let questionID: Int
-    let picked: [Int]?
-    let answer: Int?
-    let answers: [Int]?
-    let correct: Bool
-    let explanation: String?
-    enum CodingKeys: String, CodingKey {
-        case picked, answer, answers, correct, explanation
-        case questionID = "question_id"
     }
 }

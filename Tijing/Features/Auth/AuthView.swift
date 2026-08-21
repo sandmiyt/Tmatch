@@ -21,11 +21,14 @@ struct AuthView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if let pending {
-                    successView(pending)
-                } else {
-                    authForm
+            ZStack {
+                TijingPageBackground()
+                Group {
+                    if let pending {
+                        successView(pending)
+                    } else {
+                        authForm
+                    }
                 }
             }
             .navigationTitle("题竞")
@@ -45,88 +48,152 @@ struct AuthView: View {
     }
 
     private var authForm: some View {
-        Form {
-            Picker("方式", selection: $mode) {
-                ForEach(AuthMode.allCases) { item in Text(item.title).tag(item) }
-            }
-            .pickerStyle(.segmented)
-            .onChange(of: mode) { _, _ in resetForModeSwitch() }
-
-            Section {
-                switch mode {
-                case .login:
-                    TextField("昵称", text: $account)
-                        .textContentType(.username)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    SecureField("密码", text: $password)
-                        .textContentType(.password)
-                case .register:
-                    TextField("昵称（最多 8 格）", text: $nickname)
-                        .textContentType(.nickname)
-                        .onChange(of: nickname) { _, value in nickname = String(value.prefix(8)) }
-                    SecureField("设置密码（至少 6 位）", text: $password)
-                        .textContentType(.newPassword)
-                    TextField("邮箱（用于验证和找回密码）", text: $email)
-                        .keyboardType(.emailAddress)
-                        .textContentType(.emailAddress)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .onChange(of: email) { _, _ in code = ""; clearNotice() }
-                    codeRow(
-                        placeholder: "邮箱收到的 6 位验证码",
-                        cooldown: registerCooldown,
-                        actionName: "register-code",
-                        enabled: emailLooksValid,
-                        sendAction: sendRegisterCode
-                    )
-                case .recover:
-                    TextField("昵称或 8 位数字账号", text: $account)
-                        .textContentType(.username)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .onChange(of: account) { _, _ in code = ""; clearNotice() }
-                    codeRow(
-                        placeholder: "邮箱验证码",
-                        cooldown: recoveryCooldown,
-                        actionName: "recovery-code",
-                        enabled: account.trimmingCharacters(in: .whitespacesAndNewlines).count >= 2,
-                        sendAction: sendRecoveryCode
-                    )
-                    SecureField("设置新密码（至少 6 位）", text: $newPassword)
-                        .textContentType(.newPassword)
-                    SecureField("再次输入新密码", text: $confirmPassword)
-                        .textContentType(.newPassword)
-                    if !confirmPassword.isEmpty, newPassword != confirmPassword {
-                        Text("两次输入的新密码不一致")
-                            .font(.footnote)
-                            .foregroundStyle(.red)
+        ScrollView {
+            VStack(spacing: 18) {
+                TijingPaperCard(tint: authTint, rotation: -0.25) {
+                    HStack(spacing: 13) {
+                        TijingStickerIcon(systemImage: authIcon, tint: authAccent, background: authTint, size: 52, rotation: -7)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(mode.title)
+                                .font(.title3.bold())
+                            Text(mode.helperText)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer(minLength: 0)
                     }
                 }
-            } footer: {
-                Text(mode.helperText)
-            }
 
-            if let message {
-                Section {
-                    Label(message, systemImage: isError ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
-                        .foregroundStyle(isError ? Color.red : Color.green)
+                Picker("方式", selection: $mode) {
+                    ForEach(AuthMode.allCases) { item in Text(item.title).tag(item) }
                 }
-            }
+                .pickerStyle(.segmented)
+                .onChange(of: mode) { _, _ in resetForModeSwitch() }
 
-            Section {
+                VStack(spacing: 12) {
+                    switch mode {
+                    case .login:
+                        TijingFieldSurface("账号") {
+                            TextField("昵称", text: $account)
+                                .textContentType(.username)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                        }
+                        TijingFieldSurface("密码") {
+                            SecureField("密码", text: $password)
+                                .textContentType(.password)
+                        }
+                    case .register:
+                        TijingFieldSurface("昵称") {
+                            TextField("最多 8 格", text: $nickname)
+                                .textContentType(.nickname)
+                                .onChange(of: nickname) { _, value in nickname = String(value.prefix(8)) }
+                            Text("\(nickname.count)/8")
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .trailing)
+                        }
+                        TijingFieldSurface("密码") {
+                            SecureField("设置密码（至少 6 位）", text: $password)
+                                .textContentType(.newPassword)
+                        }
+                        TijingFieldSurface("邮箱验证") {
+                            TextField("邮箱地址", text: $email)
+                                .keyboardType(.emailAddress)
+                                .textContentType(.emailAddress)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .onChange(of: email) { _, _ in code = ""; clearNotice() }
+                            Divider()
+                            codeRow(
+                                placeholder: "邮箱收到的 6 位验证码",
+                                cooldown: registerCooldown,
+                                actionName: "register-code",
+                                enabled: emailLooksValid,
+                                sendAction: sendRegisterCode
+                            )
+                        }
+                    case .recover:
+                        TijingFieldSurface("找回账号") {
+                            TextField("昵称或 8 位数字账号", text: $account)
+                                .textContentType(.username)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .onChange(of: account) { _, _ in code = ""; clearNotice() }
+                            Divider()
+                            codeRow(
+                                placeholder: "邮箱验证码",
+                                cooldown: recoveryCooldown,
+                                actionName: "recovery-code",
+                                enabled: account.trimmingCharacters(in: .whitespacesAndNewlines).count >= 2,
+                                sendAction: sendRecoveryCode
+                            )
+                        }
+                        TijingFieldSurface("新密码") {
+                            SecureField("设置新密码（至少 6 位）", text: $newPassword)
+                                .textContentType(.newPassword)
+                            Divider()
+                            SecureField("再次输入新密码", text: $confirmPassword)
+                                .textContentType(.newPassword)
+                            if !confirmPassword.isEmpty, newPassword != confirmPassword {
+                                Label("两次输入的新密码不一致", systemImage: "exclamationmark.circle")
+                                    .font(.footnote)
+                                    .foregroundStyle(.red)
+                            }
+                        }
+                    }
+                }
+
+                if let message {
+                    Label(message, systemImage: isError ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(isError ? Color.red : TijingDesign.mint)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(14)
+                        .tijingCard()
+                }
+
                 Button {
+                    Haptics.medium()
                     Task { await submit() }
                 } label: {
-                    HStack {
-                        Spacer()
-                        if busyAction == "submit" { ProgressView().controlSize(.small) }
-                        Text(mode.actionTitle).bold()
-                        Spacer()
+                    HStack(spacing: 8) {
+                        if busyAction == "submit" { ProgressView().controlSize(.small).tint(.white) }
+                        Text(mode.actionTitle)
+                        Image(systemName: "arrow.right")
                     }
                 }
+                .buttonStyle(TijingPrimaryButtonStyle())
                 .disabled(isBusy || !canSubmit)
             }
+            .padding(.horizontal, TijingDesign.pageHorizontalPadding)
+            .padding(.top, 12)
+            .padding(.bottom, 30)
+        }
+    }
+
+    private var authTint: Color {
+        switch mode {
+        case .login: TijingDesign.sky
+        case .register: TijingDesign.sage
+        case .recover: TijingDesign.butter
+        }
+    }
+
+    private var authAccent: Color {
+        switch mode {
+        case .login: TijingDesign.indigo
+        case .register: TijingDesign.mint
+        case .recover: TijingDesign.amber
+        }
+    }
+
+    private var authIcon: String {
+        switch mode {
+        case .login: "person.crop.circle.fill"
+        case .register: "person.crop.circle.badge.plus"
+        case .recover: "key.fill"
         }
     }
 
@@ -159,39 +226,36 @@ struct AuthView: View {
     private func successView(_ result: AuthPendingResult) -> some View {
         ScrollView {
             VStack(spacing: 18) {
-                Image(systemName: "checkmark.shield.fill")
-                    .font(.system(size: 54))
-                    .foregroundStyle(.tint)
-                    .padding(.top, 34)
-
-                VStack(spacing: 7) {
-                    Text(result.kind == .register ? "账号创建成功" : "密码已重置")
-                        .font(.title2.bold())
-                    Text(result.kind == .register
-                         ? "邮箱已经验证并绑定到账号，以后忘记密码可通过邮箱验证码找回。"
-                         : "新密码已经生效，原来的登录会话已失效。")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
+                TijingPaperCard(tint: TijingDesign.sage, rotation: -0.3) {
+                    VStack(alignment: .leading, spacing: 15) {
+                        TijingStickerIcon(systemImage: "checkmark.shield.fill", tint: TijingDesign.mint, background: TijingDesign.sage, size: 60, rotation: -7)
+                        Text(result.kind == .register ? "账号创建成功" : "密码已重置")
+                            .font(.title2.bold())
+                        Text(result.kind == .register
+                             ? "邮箱已经验证并绑定到账号，以后忘记密码可以直接通过邮箱找回。"
+                             : "新密码已经生效，原来的登录会话已经失效。")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 if result.kind == .register {
-                    VStack(spacing: 8) {
-                        Text("8 位数字账号")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text(result.username ?? "--")
-                            .font(.system(.title, design: .rounded, weight: .bold))
-                            .textSelection(.enabled)
-                        if let email = result.email, !email.isEmpty {
-                            Text("绑定邮箱：\(email)")
-                                .font(.footnote)
+                    TijingPaperCard(tint: TijingDesign.sky) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            TijingMicroBadge(title: "记住这个账号", systemImage: "number", tint: TijingDesign.indigo)
+                            Text(result.username ?? "--")
+                                .font(.system(.largeTitle, design: .rounded, weight: .bold))
+                                .textSelection(.enabled)
+                            Text("8 位数字账号")
+                                .font(.caption)
                                 .foregroundStyle(.secondary)
+                            if let email = result.email, !email.isEmpty {
+                                Label(email, systemImage: "envelope.fill")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(18)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 }
 
                 if result.bannedUntil != nil {
@@ -199,7 +263,7 @@ struct AuthView: View {
                         .font(.footnote)
                         .foregroundStyle(.orange)
                         .padding(14)
-                        .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 14))
+                        .background(Color.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 }
 
                 Button(result.token != nil && result.user != nil ? "进入题竞" : "返回登录") {
@@ -213,11 +277,10 @@ struct AuthView: View {
                         resetForModeSwitch()
                     }
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .frame(maxWidth: .infinity)
+                .buttonStyle(TijingPrimaryButtonStyle())
             }
-            .padding(.horizontal, 24)
+            .padding(.horizontal, TijingDesign.pageHorizontalPadding)
+            .padding(.top, 14)
             .padding(.bottom, 30)
         }
     }

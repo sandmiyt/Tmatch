@@ -13,15 +13,26 @@ struct BattleHistoryView: View {
             } else if items.isEmpty {
                 ContentUnavailableView("暂无排位战绩", systemImage: "clock.arrow.circlepath", description: Text(error ?? "完成排位对战后会出现在这里"))
             } else {
-                List(items) { item in
+                List {
+                    Section {
+                        historyHeader
+                            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 10, trailing: 16))
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
+                    }
+                    ForEach(items) { item in
                     NavigationLink {
                         BattleHistoryDetailView(recordID: item.id)
                     } label: {
                         HStack(spacing: 13) {
-                            Image(systemName: item.draw ? "equal.circle.fill" : (item.won ? "trophy.fill" : "flag.checkered"))
-                                .font(.title2)
-                                .foregroundStyle(item.draw ? .secondary : (item.won ? Color.green : Color.red))
-                                .frame(width: 34)
+                            TijingStickerIcon(
+                                systemImage: item.draw ? "equal.circle.fill" : (item.won ? "trophy.fill" : "flag.checkered"),
+                                tint: item.draw ? .secondary : (item.won ? TijingDesign.mint : TijingDesign.coral),
+                                background: item.draw ? TijingDesign.sky : (item.won ? TijingDesign.sage : TijingDesign.rose),
+                                size: 42,
+                                rotation: item.won ? -5 : 5,
+                                sparkle: item.won
+                            )
 
                             VStack(alignment: .leading, spacing: 5) {
                                 Text("VS \(item.opponent)")
@@ -41,14 +52,35 @@ struct BattleHistoryView: View {
                                     .foregroundStyle(item.draw ? .secondary : (item.won ? Color.green : Color.red))
                             }
                         }
-                        .padding(.vertical, 5)
+                        .padding(.vertical, 6)
                     }
+                    .listRowBackground(Color.clear)
                 }
+                }
+                .scrollContentBackground(.hidden)
+                .background(TijingPageBackground())
             }
         }
         .navigationTitle("排位战绩")
         .refreshable { await load() }
         .task { await load() }
+    }
+
+
+    private var historyHeader: some View {
+        TijingPaperCard(tint: TijingDesign.lilac, rotation: -0.2) {
+            HStack(spacing: 13) {
+                TijingStickerIcon(systemImage: "clock.arrow.circlepath", tint: TijingDesign.violet, background: TijingDesign.lilac, size: 48, rotation: -6)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("最近的对局")
+                        .font(.headline)
+                    Text("点进每一场可以继续看逐题复盘、收藏和纠错。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+            }
+        }
     }
 
     @MainActor private func load() async {
@@ -153,8 +185,14 @@ private struct BattleHistoryDetailView: View {
                 historyMetric(ratingText(detail.ratingDelta), title: "竞点变化")
             }
         }
-        .padding(16)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .padding(18)
+        .background(resultTint(detail).opacity(0.18), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay { RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(resultTint(detail).opacity(0.16)) }
+    }
+
+    private func resultTint(_ detail: BattleHistoryDetail) -> Color {
+        if detail.draw { return TijingDesign.sky }
+        return detail.won ? TijingDesign.sage : TijingDesign.rose
     }
 
     private func historyMetric(_ value: String, title: String) -> some View {
@@ -169,7 +207,8 @@ private struct BattleHistoryDetailView: View {
 
     private func questionCard(_ item: BattleHistoryQuestion, number: Int) -> some View {
         VStack(alignment: .leading, spacing: 13) {
-            HStack(alignment: .top) {
+            HStack(alignment: .top, spacing: 11) {
+                TijingStickerIcon(systemImage: item.correct ? "checkmark.circle.fill" : "xmark.circle.fill", tint: item.correct ? TijingDesign.mint : TijingDesign.coral, background: item.correct ? TijingDesign.sage : TijingDesign.rose, size: 38, rotation: -4, sparkle: false)
                 VStack(alignment: .leading, spacing: 3) {
                     Text("第 \(number) 题")
                         .font(.headline)

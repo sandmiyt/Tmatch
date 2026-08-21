@@ -15,9 +15,17 @@ struct FriendsView: View {
     @State private var battleRoomID: String?
     @State private var loading = true
     @State private var presence: [Int: Bool] = [:]
+    @State private var selectedUserCard: UserCardTarget?
 
     var body: some View {
         List {
+            Section {
+                friendsHeader
+                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 10, trailing: 16))
+                    .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+            }
+
             if !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Section("搜索结果") {
                     if searchResults.isEmpty { Text("没有找到匹配用户").foregroundStyle(.secondary) }
@@ -28,19 +36,23 @@ struct FriendsView: View {
             if !incoming.isEmpty {
                 Section("好友申请") {
                     ForEach(incoming) { relation in
-                        NavigationLink {
-                            PublicProfileView(userID: relation.user.id)
+                        Button {
+                            Haptics.selection()
+                            selectedUserCard = UserCardTarget(id: relation.user.id)
                         } label: {
                             HStack(spacing: 12) {
                                 RemoteAvatar(urlString: relation.user.avatarURL, name: relation.user.nickname, size: 42)
                                 VStack(alignment: .leading, spacing: 3) {
-                                    Text(relation.user.nickname).font(.headline)
+                                    Text(relation.user.nickname).font(.headline).foregroundStyle(.primary)
                                     Text("向你发送了好友申请")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
+                                Spacer()
+                                Image(systemName: "chevron.up.chevron.down").font(.caption2).foregroundStyle(.tertiary)
                             }
                         }
+                        .buttonStyle(.plain)
                         .swipeActions(edge: .leading, allowsFullSwipe: true) {
                             Button("接受") { accept(relation) }
                                 .tint(.green)
@@ -81,19 +93,20 @@ struct FriendsView: View {
                 if loading && blocked.isEmpty { ProgressView("正在同步黑名单…") }
                 else if blocked.isEmpty { Text("黑名单为空").foregroundStyle(.secondary) }
                 ForEach(blocked) { item in
-                    NavigationLink {
-                        PublicProfileView(userID: item.user.id)
+                    Button {
+                        Haptics.selection()
+                        selectedUserCard = UserCardTarget(id: item.user.id)
                     } label: {
                         HStack(spacing: 12) {
                             RemoteAvatar(urlString: item.user.avatarURL, name: item.user.nickname, size: 38)
                             VStack(alignment: .leading, spacing: 3) {
-                                Text(item.user.nickname)
-                                Text("已拉黑")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                Text(item.user.nickname).foregroundStyle(.primary)
+                                Text("已拉黑").font(.caption).foregroundStyle(.secondary)
                             }
+                            Spacer()
                         }
                     }
+                    .buttonStyle(.plain)
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                         Button("移出黑名单") { unblock(item.user) }
                             .tint(.blue)
@@ -104,6 +117,8 @@ struct FriendsView: View {
             if let message { Section { Text(message).font(.footnote).foregroundStyle(.secondary) } }
             if let error { Section { Text(error).font(.footnote).foregroundStyle(.red) } }
         }
+        .scrollContentBackground(.hidden)
+        .background(TijingPageBackground())
         .navigationTitle("好友")
         .searchable(text: $searchText, prompt: "搜索昵称")
         .task {
@@ -118,6 +133,11 @@ struct FriendsView: View {
                 inviteBattle(user, subject: subject, topic: topic)
             }
         }
+        .sheet(item: $selectedUserCard) { target in
+            PublicProfileView(userID: target.id)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
         .navigationDestination(item: $selectedChallenge) { route in
             DailyChallengeView(challengeID: route.id)
         }
@@ -126,6 +146,24 @@ struct FriendsView: View {
                 BattleRoomView(store: BattleRoomStore(roomID: roomID, token: token))
             } else {
                 ContentUnavailableView("登录状态已失效", systemImage: "person.crop.circle.badge.exclamationmark")
+            }
+        }
+    }
+
+
+    private var friendsHeader: some View {
+        TijingPaperCard(tint: TijingDesign.sky, rotation: -0.2) {
+            HStack(spacing: 13) {
+                TijingStickerIcon(systemImage: "person.2.fill", tint: TijingDesign.cyan, background: TijingDesign.sky, size: 50, rotation: -6)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("一起刷，也一起比")
+                        .font(.headline)
+                    Text("在线好友会自动排在前面。点头像看用户卡片，点闪电直接发起挑战。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
             }
         }
     }
@@ -142,8 +180,9 @@ struct FriendsView: View {
     private func friendRow(_ relation: FriendRelation) -> some View {
         let isOnline = presence[relation.user.id] ?? relation.user.online ?? false
         return HStack(spacing: 12) {
-            NavigationLink {
-                PublicProfileView(userID: relation.user.id)
+            Button {
+                Haptics.selection()
+                selectedUserCard = UserCardTarget(id: relation.user.id)
             } label: {
                 HStack(spacing: 12) {
                     ZStack(alignment: .bottomTrailing) {
@@ -151,18 +190,24 @@ struct FriendsView: View {
                         Circle().fill(isOnline ? Color.green : Color.gray).frame(width: 11, height: 11).overlay(Circle().stroke(Color(uiColor: .systemBackground), lineWidth: 2))
                     }
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(relation.user.nickname).font(.headline)
+                        Text(relation.user.nickname).font(.headline).foregroundStyle(.primary)
                         Text(isOnline ? "在线" : "离线").font(.caption).foregroundStyle(.secondary)
                     }
                 }
             }
+            .buttonStyle(.plain)
             Spacer()
             Button {
                 Haptics.selection()
                 var target = relation.user
                 target.online = isOnline
                 inviteTarget = target
-            } label: { Image(systemName: "bolt.horizontal.circle") }
+            } label: {
+                Image(systemName: "bolt.horizontal.circle.fill")
+                    .font(.title3)
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(TijingDesign.indigo)
+            }
             .buttonStyle(.borderless)
             .accessibilityLabel("邀请\(relation.user.nickname)对战")
         }
@@ -171,17 +216,19 @@ struct FriendsView: View {
 
     private func userSearchRow(_ user: User) -> some View {
         HStack(spacing: 12) {
-            NavigationLink {
-                PublicProfileView(userID: user.id)
+            Button {
+                Haptics.selection()
+                selectedUserCard = UserCardTarget(id: user.id)
             } label: {
                 HStack(spacing: 12) {
                     RemoteAvatar(urlString: user.avatarURL, name: user.nickname, size: 40)
                     VStack(alignment: .leading) {
-                        Text(user.nickname).font(.headline)
+                        Text(user.nickname).font(.headline).foregroundStyle(.primary)
                         Text("\(user.rank) · \(user.rating) 竞点").font(.caption).foregroundStyle(.secondary)
                     }
                 }
             }
+            .buttonStyle(.plain)
             Spacer()
             Button(user.friendStatus == "friend" ? "已是好友" : "添加") { requestFriend(user) }
                 .disabled(user.friendStatus == "friend")
@@ -299,48 +346,75 @@ struct FriendChallengeSetupSheet: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    HStack(spacing: 12) {
-                        RemoteAvatar(urlString: user.avatarURL, name: user.nickname, size: 48)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(user.nickname).font(.headline)
-                            Text(user.online == true ? "在线：发送后进入实时好友对战" : "离线：自动转为 48 小时好友挑战")
-                                .font(.caption).foregroundStyle(.secondary)
+            ZStack {
+                TijingPageBackground()
+                ScrollView {
+                    VStack(spacing: 16) {
+                        TijingPaperCard(tint: user.online == true ? TijingDesign.sage : TijingDesign.butter, rotation: -0.25) {
+                            HStack(spacing: 13) {
+                                RemoteAvatar(urlString: user.avatarURL, name: user.nickname, size: 54)
+                                    .overlay { Circle().stroke(.white.opacity(0.82), lineWidth: 2.5) }
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(user.nickname).font(.headline)
+                                    Text(user.online == true ? "在线 · 发送后进入实时好友对战" : "离线 · 自动转为 48 小时好友挑战")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer(minLength: 0)
+                                TijingStickerIcon(systemImage: user.online == true ? "bolt.fill" : "clock.fill", tint: user.online == true ? TijingDesign.mint : TijingDesign.amber, background: user.online == true ? TijingDesign.sage : TijingDesign.butter, size: 40, rotation: 6, sparkle: false)
+                            }
                         }
-                    }
-                }
 
-                Section("挑战范围") {
-                    Picker("题库", selection: $subject) {
-                        Text("全部题库").tag("")
-                        ForEach(catalog) { item in Text("\(item.name)（\(item.count)题）").tag(item.name) }
-                    }
-                    .onChange(of: subject) { _, _ in topic = "" }
-
-                    Picker("章节", selection: $topic) {
-                        Text(subject.isEmpty ? "先选择题库" : "全部章节").tag("")
-                        ForEach(selectedSubject?.topics.filter { $0.count > 0 } ?? []) { item in
-                            Text("\(item.topic)（\(item.count)题）").tag(item.topic)
+                        TijingFieldSurface("挑战范围") {
+                            Picker("题库", selection: $subject) {
+                                Text("全部题库").tag("")
+                                ForEach(catalog) { item in Text("\(item.name)（\(item.count)题）").tag(item.name) }
+                            }
+                            .onChange(of: subject) { _, _ in topic = "" }
+                            Divider()
+                            Picker("章节", selection: $topic) {
+                                Text(subject.isEmpty ? "先选择题库" : "全部章节").tag("")
+                                ForEach(selectedSubject?.topics.filter { $0.count > 0 } ?? []) { item in
+                                    Text("\(item.topic)（\(item.count)题）").tag(item.topic)
+                                }
+                            }
+                            .disabled(subject.isEmpty)
                         }
-                    }
-                    .disabled(subject.isEmpty)
-                }
 
-                if loading { Section { ProgressView("正在读取题库…") } }
-                if let error { Section { Text(error).font(.footnote).foregroundStyle(.red) } }
+                        if loading {
+                            HStack { ProgressView(); Text("正在读取题库…").foregroundStyle(.secondary) }
+                                .font(.footnote)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(14)
+                                .tijingCard()
+                        }
+                        if let error {
+                            Label(error, systemImage: "exclamationmark.circle.fill")
+                                .font(.footnote)
+                                .foregroundStyle(.red)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(14)
+                                .tijingCard()
+                        }
+
+                        Button {
+                            Haptics.medium()
+                            onSend(subject.isEmpty ? nil : subject, topic.isEmpty ? nil : topic)
+                        } label: {
+                            Label("发送挑战", systemImage: "paperplane.fill")
+                        }
+                        .buttonStyle(TijingPrimaryButtonStyle())
+                        .disabled(loading)
+                    }
+                    .padding(.horizontal, TijingDesign.pageHorizontalPadding)
+                    .padding(.top, 10)
+                    .padding(.bottom, 28)
+                }
             }
             .navigationTitle("好友挑战")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("发送") {
-                        Haptics.medium()
-                        onSend(subject.isEmpty ? nil : subject, topic.isEmpty ? nil : topic)
-                    }
-                    .disabled(loading)
-                }
             }
             .task { await loadCatalog() }
             .sensoryFeedback(.selection, trigger: subject)

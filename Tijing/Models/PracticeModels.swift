@@ -68,7 +68,6 @@ enum PracticeMode: String, Identifiable, CaseIterable {
     case wrong
     case favorite
     case smartReview = "smart_review"
-    case exam
 
     var id: String { rawValue }
     var title: String {
@@ -77,7 +76,6 @@ enum PracticeMode: String, Identifiable, CaseIterable {
         case .wrong: "错题重练"
         case .favorite: "收藏练习"
         case .smartReview: "智能复习"
-        case .exam: "模拟考试"
         }
     }
 }

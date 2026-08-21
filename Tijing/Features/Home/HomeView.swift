@@ -323,7 +323,7 @@ struct HomeView: View {
     }
 
     private var challengeSubtitle: String {
-        guard let challenge else { return "每天同题竞技，看看今天能排到哪里" }
+        guard let challenge else { return "每天同题挑战，看看今天能排到哪里" }
         if let best = challenge.myBest { return "我的最好：\(best.correctCount ?? 0)题" }
         return "今日已有 \(challenge.challengerCount ?? 0) 人挑战"
     }

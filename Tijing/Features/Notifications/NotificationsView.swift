@@ -6,62 +6,43 @@ struct NotificationsView: View {
     @State private var error: String?
     @State private var confirmDeleteAll = false
     @State private var selectedChallenge: ChallengeRoute?
-    @State private var selectedUserID: Int?
+    @State private var selectedUserCard: UserCardTarget?
     @State private var loading = true
 
     var body: some View {
-        Group {
-            if loading && items.isEmpty {
-                ProgressView("正在加载通知…")
-            } else if items.isEmpty {
-                ContentUnavailableView("暂无通知", systemImage: "bell.slash", description: Text(error ?? "新的好友、对战和系统消息会出现在这里"))
-            } else {
-                List {
-                    ForEach(items) { item in
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack(alignment: .firstTextBaseline) {
-                                Text(item.title).font(.headline)
-                                if !item.isRead { Circle().fill(.tint).frame(width: 7, height: 7) }
-                                Spacer()
-                                Text(TijingFormat.dateTime(item.createdAt)).font(.caption2).foregroundStyle(.secondary)
-                            }
-                            Text(item.content).font(.subheadline).foregroundStyle(.secondary)
-                            if item.isFriendChallenge, let challengeID = item.relatedID?.stringValue, !challengeID.isEmpty {
-                                Button {
-                                    markRead(item)
-                                    Haptics.selection()
-                                    selectedChallenge = ChallengeRoute(id: challengeID)
-                                } label: {
-                                    Label("查看好友挑战", systemImage: "chevron.right.circle")
-                                        .font(.subheadline.weight(.semibold))
-                                }
-                                .buttonStyle(.borderless)
-                            }
-                            if let relatedUserID = item.relatedUserID {
-                                Button {
-                                    markRead(item)
-                                    Haptics.selection()
-                                    selectedUserID = relatedUserID
-                                } label: {
-                                    Label("查看用户", systemImage: "person.crop.circle")
-                                        .font(.subheadline.weight(.semibold))
-                                }
-                                .buttonStyle(.borderless)
-                            }
+        ZStack {
+            TijingPageBackground()
+            Group {
+                if loading && items.isEmpty {
+                    ProgressView("正在加载通知…")
+                } else if items.isEmpty {
+                    ContentUnavailableView("暂无通知", systemImage: "bell.slash", description: Text(error ?? "新的好友、对战和系统消息会出现在这里"))
+                } else {
+                    List {
+                        Section {
+                            notificationHeader
+                                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 10, trailing: 16))
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
                         }
-                        .padding(.vertical, 5)
-                        .contentShape(Rectangle())
-                        .onTapGesture { markRead(item) }
-                        .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                            if !item.isRead {
-                                Button("标为已读") { markRead(item) }
-                                    .tint(.blue)
-                            }
-                        }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                            Button("删除", role: .destructive) { delete(item) }
+
+                        ForEach(items) { item in
+                            notificationCard(item)
+                                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                                .listRowSeparator(.hidden)
+                                .listRowBackground(Color.clear)
+                                .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                                    if !item.isRead {
+                                        Button("标为已读") { markRead(item) }.tint(.blue)
+                                    }
+                                }
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    Button("删除", role: .destructive) { delete(item) }
+                                }
                         }
                     }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
                 }
             }
         }
@@ -79,18 +60,106 @@ struct NotificationsView: View {
         }
         .refreshable { await load() }
         .task { await load() }
-        .onChange(of: session.unreadNotifications) { _, _ in
-            Task { await load() }
-        }
+        .onChange(of: session.unreadNotifications) { _, _ in Task { await load() } }
         .navigationDestination(item: $selectedChallenge) { route in
             DailyChallengeView(challengeID: route.id)
         }
-        .navigationDestination(item: $selectedUserID) { userID in
-            PublicProfileView(userID: userID)
+        .sheet(item: $selectedUserCard) { target in
+            PublicProfileView(userID: target.id)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
         }
         .confirmationDialog("清空全部通知？", isPresented: $confirmDeleteAll) {
             Button("清空", role: .destructive) { deleteAll() }
         }
+    }
+
+    private var notificationHeader: some View {
+        TijingPaperCard(tint: TijingDesign.lilac, rotation: -0.25) {
+            HStack(spacing: 13) {
+                TijingStickerIcon(systemImage: "bell.badge.fill", tint: TijingDesign.violet, background: TijingDesign.lilac, size: 48, rotation: -7)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("消息收纳盒")
+                        .font(.headline)
+                    Text("挑战、好友和系统消息都在这里。左滑删除，右滑可快速标为已读。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    private func notificationCard(_ item: AppNotification) -> some View {
+        TijingPaperCard(tint: notificationTint(item)) {
+            HStack(alignment: .top, spacing: 12) {
+                TijingStickerIcon(
+                    systemImage: notificationIcon(item),
+                    tint: notificationAccent(item),
+                    background: notificationTint(item),
+                    size: 42,
+                    rotation: item.isRead ? -3 : 5,
+                    sparkle: !item.isRead
+                )
+
+                VStack(alignment: .leading, spacing: 9) {
+                    HStack(alignment: .firstTextBaseline) {
+                        HStack(spacing: 7) {
+                            if !item.isRead { Circle().fill(TijingDesign.indigo).frame(width: 7, height: 7) }
+                            Text(item.title).font(.headline)
+                        }
+                        Spacer()
+                        Text(TijingFormat.dateTime(item.createdAt))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(item.content)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    HStack(spacing: 8) {
+                        if item.isFriendChallenge, let challengeID = item.relatedID?.stringValue, !challengeID.isEmpty {
+                            Button {
+                                markRead(item); Haptics.selection(); selectedChallenge = ChallengeRoute(id: challengeID)
+                            } label: { TijingMicroBadge(title: "查看挑战", systemImage: "bolt.circle.fill", tint: TijingDesign.indigo) }
+                            .buttonStyle(.plain)
+                        }
+                        if let relatedUserID = item.relatedUserID {
+                            Button {
+                                markRead(item); Haptics.selection(); selectedUserCard = UserCardTarget(id: relatedUserID)
+                            } label: { TijingMicroBadge(title: "用户卡片", systemImage: "person.crop.circle.fill", tint: TijingDesign.mint) }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { markRead(item) }
+    }
+
+    private func notificationIcon(_ item: AppNotification) -> String {
+        if item.kind.contains("challenge") { return "bolt.fill" }
+        if item.kind.contains("friend") { return "person.2.fill" }
+        if item.kind.contains("rank") || item.kind.contains("season") { return "trophy.fill" }
+        return "bell.fill"
+    }
+
+    private func notificationTint(_ item: AppNotification) -> Color {
+        if item.isRead { return Color(uiColor: .secondarySystemGroupedBackground) }
+        if item.kind.contains("challenge") { return TijingDesign.butter }
+        if item.kind.contains("friend") { return TijingDesign.sky }
+        if item.kind.contains("rank") || item.kind.contains("season") { return TijingDesign.peach }
+        return TijingDesign.lilac
+    }
+
+    private func notificationAccent(_ item: AppNotification) -> Color {
+        if item.kind.contains("challenge") { return TijingDesign.amber }
+        if item.kind.contains("friend") { return TijingDesign.cyan }
+        if item.kind.contains("rank") || item.kind.contains("season") { return TijingDesign.coral }
+        return TijingDesign.violet
     }
 
     @MainActor private func load() async {

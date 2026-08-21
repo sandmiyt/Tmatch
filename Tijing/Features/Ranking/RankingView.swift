@@ -9,6 +9,7 @@ struct RankingView: View {
     @State private var loading = true
     @State private var error: String?
     @State private var seasonPanel: SeasonPanel?
+    @State private var selectedUserCard: UserCardTarget?
 
     var body: some View {
         ZStack {
@@ -24,7 +25,7 @@ struct RankingView: View {
                         VStack(alignment: .leading, spacing: 7) {
                             Text("排行榜")
                                 .font(.system(.largeTitle, design: .rounded, weight: .heavy))
-                            Text("这一季，看看谁真的把正确率打成了段位。")
+                            Text("这一季的排行、记录和个人进展，都在这里。")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
@@ -71,6 +72,11 @@ struct RankingView: View {
             case .previous:
                 if let previous = seasonMe?.previous { PreviousSeasonReportView(result: previous) }
             }
+        }
+        .sheet(item: $selectedUserCard) { target in
+            PublicProfileView(userID: target.id)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
         }
     }
 
@@ -127,13 +133,13 @@ struct RankingView: View {
     @ViewBuilder
     private func podiumLink(_ user: User, place: Int) -> some View {
         if session.token != nil {
-            NavigationLink {
-                PublicProfileView(userID: user.id)
+            Button {
+                Haptics.selection()
+                selectedUserCard = UserCardTarget(id: user.id)
             } label: {
                 SeasonPodiumCard(user: user, place: place)
             }
             .buttonStyle(TijingPressableCardStyle())
-            .tijingTactileLink()
         } else {
             SeasonPodiumCard(user: user, place: place)
         }
@@ -191,13 +197,13 @@ struct RankingView: View {
             TijingSettingsGroup {
                 ForEach(Array(items.dropFirst(min(3, items.count)))) { user in
                     if session.token != nil {
-                        NavigationLink {
-                            PublicProfileView(userID: user.id)
+                        Button {
+                            Haptics.selection()
+                            selectedUserCard = UserCardTarget(id: user.id)
                         } label: {
                             rankingRow(user)
                         }
                         .buttonStyle(.plain)
-                        .tijingTactileLink()
                     } else {
                         rankingRow(user)
                     }
@@ -360,37 +366,65 @@ private struct SeasonAchievementsView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
+            ZStack {
+                TijingPageBackground()
                 if let current {
-                    List {
-                        Section {
-                            LabeledContent("已解锁", value: "\(current.achievementCount) / \(current.achievementTotal)")
-                        }
-                        if current.achievements.isEmpty {
-                            Section { Text("完成第一场排位后，赛季成就会从这里开始亮起来。").foregroundStyle(.secondary) }
-                        } else {
-                            Section("已解锁成就") {
-                                ForEach(current.achievements) { achievement in
-                                    HStack(alignment: .top, spacing: 12) {
-                                        Text(achievement.icon).font(.title2).frame(width: 38)
-                                        VStack(alignment: .leading, spacing: 3) {
-                                            Text(achievement.title).font(.headline)
-                                            Text(achievement.description).font(.subheadline).foregroundStyle(.secondary)
+                    ScrollView {
+                        VStack(spacing: 16) {
+                            TijingPaperCard(tint: TijingDesign.butter, rotation: -0.25) {
+                                HStack(spacing: 13) {
+                                    TijingStickerIcon(systemImage: "sparkles", tint: TijingDesign.amber, background: TijingDesign.butter, size: 50, rotation: -7)
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text("本赛季成就")
+                                            .font(.headline)
+                                        Text("已解锁 \(current.achievementCount) / \(current.achievementTotal)")
+                                            .font(.subheadline)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Spacer(minLength: 0)
+                                }
+                            }
+
+                            if current.achievements.isEmpty {
+                                TijingPaperCard(tint: TijingDesign.sky) {
+                                    Text("完成第一场排位后，赛季成就会从这里开始亮起来。")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                }
+                            } else {
+                                ForEach(Array(current.achievements.enumerated()), id: \.element.id) { index, achievement in
+                                    TijingPaperCard(tint: achievementTint(index)) {
+                                        HStack(alignment: .top, spacing: 12) {
+                                            Text(achievement.icon)
+                                                .font(.system(size: 26))
+                                                .frame(width: 42, height: 42)
+                                                .background(.white.opacity(0.52), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                                            VStack(alignment: .leading, spacing: 4) {
+                                                Text(achievement.title).font(.headline)
+                                                Text(achievement.description).font(.subheadline).foregroundStyle(.secondary)
+                                            }
+                                            Spacer(minLength: 0)
                                         }
                                     }
-                                    .padding(.vertical, 4)
                                 }
                             }
                         }
+                        .padding(.horizontal, TijingDesign.pageHorizontalPadding)
+                        .padding(.top, 10)
+                        .padding(.bottom, 28)
                     }
                 } else {
                     ProgressView("正在同步赛季成就…")
                 }
             }
-            .navigationTitle("本赛季成就")
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
         }
+    }
+
+    private func achievementTint(_ index: Int) -> Color {
+        [TijingDesign.sky, TijingDesign.sage, TijingDesign.butter, TijingDesign.lilac, TijingDesign.peach][index % 5]
     }
 }
 
@@ -400,38 +434,72 @@ private struct PreviousSeasonReportView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                Section {
-                    VStack(alignment: .leading, spacing: 7) {
-                        Text(result.seasonLabel).font(.caption).foregroundStyle(.secondary)
-                        Text(result.title).font(.title2.bold())
-                        if let summary = result.report?.summary, !summary.isEmpty {
-                            Text(summary).font(.subheadline).foregroundStyle(.secondary)
+            ZStack {
+                TijingPageBackground()
+                ScrollView {
+                    VStack(spacing: 16) {
+                        TijingPaperCard(tint: TijingDesign.lilac, rotation: -0.25) {
+                            HStack(spacing: 13) {
+                                TijingStickerIcon(systemImage: "clock.arrow.circlepath", tint: TijingDesign.violet, background: TijingDesign.lilac, size: 50, rotation: -7)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(result.seasonLabel).font(.caption).foregroundStyle(.secondary)
+                                    Text(result.title).font(.title2.bold())
+                                    if let summary = result.report?.summary, !summary.isEmpty {
+                                        Text(summary).font(.subheadline).foregroundStyle(.secondary)
+                                    }
+                                }
+                                Spacer(minLength: 0)
+                            }
+                        }
+
+                        TijingPaperCard(tint: TijingDesign.sky) {
+                            VStack(spacing: 12) {
+                                TijingMiniStatRow(systemImage: "number", title: "最终排名", value: "#\(result.finalPosition)", tint: TijingDesign.indigo)
+                                TijingMiniStatRow(systemImage: "sparkles", title: "最终竞点", value: "\(result.finalRating)", tint: TijingDesign.amber)
+                                TijingMiniStatRow(systemImage: "arrow.up.right", title: "最高竞点", value: "\(result.peakRating)", tint: TijingDesign.mint)
+                                TijingMiniStatRow(systemImage: "trophy.fill", title: "赛季战绩", value: "\(result.wins)胜 \(result.losses)负", tint: TijingDesign.violet)
+                                TijingMiniStatRow(systemImage: "flame.fill", title: "最长连胜", value: "\(result.report?.maxWinStreak ?? 0)", tint: TijingDesign.coral)
+                            }
+                        }
+
+                        TijingPaperCard(tint: TijingDesign.sage) {
+                            HStack(spacing: 12) {
+                                TijingStickerIcon(systemImage: "arrow.forward.circle.fill", tint: TijingDesign.mint, background: TijingDesign.sage, size: 42, sparkle: false)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text("新赛季继承")
+                                        .font(.headline)
+                                    Text("\(result.inheritedRank) · \(result.inheritedRating) 竞点")
+                                        .font(.subheadline.weight(.semibold))
+                                    Text("只继承段位起点，上赛季积分不会原样滚入新赛季。")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer(minLength: 0)
+                            }
+                        }
+
+                        if !result.achievements.isEmpty {
+                            VStack(spacing: 10) {
+                                TijingSectionHeading("本季成就")
+                                ForEach(Array(result.achievements.prefix(8).enumerated()), id: \.element.id) { index, achievement in
+                                    HStack(spacing: 12) {
+                                        Text(achievement.icon).font(.title3).frame(width: 34)
+                                        Text(achievement.title).font(.subheadline.weight(.semibold))
+                                        Spacer()
+                                        Image(systemName: "checkmark.seal.fill").foregroundStyle(TijingDesign.mint)
+                                    }
+                                    .padding(14)
+                                    .tijingCard()
+                                }
+                            }
                         }
                     }
-                    .padding(.vertical, 6)
-                }
-                Section("赛季数据") {
-                    LabeledContent("最终排名", value: "#\(result.finalPosition)")
-                    LabeledContent("最终竞点", value: "\(result.finalRating)")
-                    LabeledContent("最高竞点", value: "\(result.peakRating)")
-                    LabeledContent("赛季战绩", value: "\(result.wins)胜 \(result.losses)负")
-                    LabeledContent("最长连胜", value: "\(result.report?.maxWinStreak ?? 0)")
-                }
-                Section("新赛季继承") {
-                    LabeledContent(result.inheritedRank, value: "\(result.inheritedRating) 竞点")
-                    Text("只继承段位起点，上赛季积分不会原样滚入新赛季。")
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-                if !result.achievements.isEmpty {
-                    Section("本季成就") {
-                        ForEach(result.achievements.prefix(8)) { achievement in
-                            Label("\(achievement.icon) \(achievement.title)", systemImage: "checkmark.seal")
-                        }
-                    }
+                    .padding(.horizontal, TijingDesign.pageHorizontalPadding)
+                    .padding(.top, 10)
+                    .padding(.bottom, 28)
                 }
             }
-            .navigationTitle("上赛季报告")
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
         }
@@ -440,6 +508,7 @@ private struct PreviousSeasonReportView: View {
 
 struct PublicProfileView: View {
     @Environment(SessionStore.self) private var session
+    @Environment(\.dismiss) private var dismiss
     let userID: Int
 
     @State private var profile: User?
@@ -456,143 +525,231 @@ struct PublicProfileView: View {
     private var isSelf: Bool { session.user?.id == userID }
 
     var body: some View {
-        Group {
-            if loading && profile == nil {
-                ProgressView("正在加载用户资料…")
-            } else if let profile {
-                List {
-                    Section {
-                        hero(profile)
-                            .listRowInsets(EdgeInsets(top: 16, leading: 20, bottom: 16, trailing: 20))
-                            .listRowBackground(Color.clear)
-                    }
-
-                    Section("数据") {
-                        LabeledContent("获胜率", value: "\(Int(profile.winRate ?? 0))%")
-                        LabeledContent("对战", value: "\(profile.battleCount ?? 0) 场")
-                        LabeledContent("已刷题量", value: "\(profile.questions ?? 0)")
-                        LabeledContent("好友", value: "\(profile.friendCount ?? 0)")
-                    }
-
-                    interactionSections(profile)
-
-                    if let message {
-                        Section { Label(message, systemImage: "checkmark.circle").foregroundStyle(.secondary) }
-                    }
-                    if let error {
-                        Section { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red) }
+        NavigationStack {
+            ZStack {
+                TijingPageBackground()
+                Group {
+                    if loading && profile == nil {
+                        ProgressView("正在加载用户卡片…")
+                    } else if let profile {
+                        ScrollView {
+                            VStack(spacing: 14) {
+                                compactIdentityCard(profile)
+                                compactActions(profile)
+                                if let message {
+                                    Label(message, systemImage: "checkmark.circle.fill")
+                                        .font(.footnote)
+                                        .foregroundStyle(TijingDesign.mint)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .padding(.horizontal, 4)
+                                }
+                                if let error {
+                                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                                        .font(.footnote)
+                                        .foregroundStyle(.red)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .padding(.horizontal, 4)
+                                }
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.top, 10)
+                            .padding(.bottom, 22)
+                        }
+                        .refreshable { await load() }
+                    } else {
+                        ContentUnavailableView("资料加载失败", systemImage: "person.crop.circle.badge.exclamationmark", description: Text(error ?? "暂时无法读取该用户资料"))
                     }
                 }
-                .listStyle(.insetGrouped)
-                .refreshable { await load() }
-            } else {
-                ContentUnavailableView("资料加载失败", systemImage: "person.crop.circle.badge.exclamationmark", description: Text(error ?? "暂时无法读取该用户资料"))
             }
-        }
-        .navigationTitle("用户资料")
-        .navigationBarTitleDisplayMode(.inline)
-        .task(id: userID) { await load() }
-        .sheet(item: $inviteTarget) { user in
-            FriendChallengeSetupSheet(user: user) { subject, topic in
-                inviteTarget = nil
-                inviteBattle(user, subject: subject, topic: topic)
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title3)
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(.secondary)
+                    }
+                    .accessibilityLabel("关闭")
+                }
             }
-        }
-        .sheet(isPresented: $showingReport) {
-            UserReportSheet(userID: userID) { result in
-                message = result
+            .task(id: userID) { await load() }
+            .sheet(item: $inviteTarget) { user in
+                FriendChallengeSetupSheet(user: user) { subject, topic in
+                    inviteTarget = nil
+                    inviteBattle(user, subject: subject, topic: topic)
+                }
             }
-        }
-        .navigationDestination(item: $selectedChallenge) { route in
-            DailyChallengeView(challengeID: route.id)
-        }
-        .navigationDestination(item: $battleRoomID) { roomID in
-            if let token = session.token {
-                BattleRoomView(store: BattleRoomStore(roomID: roomID, token: token))
-            } else {
-                ContentUnavailableView("登录状态已失效", systemImage: "person.crop.circle.badge.exclamationmark")
+            .sheet(isPresented: $showingReport) {
+                UserReportSheet(userID: userID) { result in message = result }
             }
-        }
-        .confirmationDialog("确定拉黑该用户？", isPresented: $confirmBlock, titleVisibility: .visible) {
-            Button("拉黑并解除好友关系", role: .destructive) { block() }
-            Button("取消", role: .cancel) { }
-        } message: {
-            Text("拉黑后双方不能再互加好友或邀请对战。")
+            .navigationDestination(item: $selectedChallenge) { route in
+                DailyChallengeView(challengeID: route.id)
+            }
+            .navigationDestination(item: $battleRoomID) { roomID in
+                if let token = session.token {
+                    BattleRoomView(store: BattleRoomStore(roomID: roomID, token: token))
+                } else {
+                    ContentUnavailableView("登录状态已失效", systemImage: "person.crop.circle.badge.exclamationmark")
+                }
+            }
+            .confirmationDialog("确定拉黑该用户？", isPresented: $confirmBlock, titleVisibility: .visible) {
+                Button("拉黑并解除好友关系", role: .destructive) { block() }
+                Button("取消", role: .cancel) { }
+            } message: {
+                Text("拉黑后双方不能再互加好友或邀请对战。")
+            }
         }
     }
 
-    private func hero(_ user: User) -> some View {
-        VStack(spacing: 12) {
-            RemoteAvatar(urlString: user.avatarURL, name: user.nickname, size: 86)
-            HStack(spacing: 8) {
-                Text(user.nickname).font(.title2.bold()).lineLimit(1)
-                if let gender = user.gender, gender != "保密" {
-                    Text(gender).font(.caption.bold()).foregroundStyle(.secondary)
+    private func compactIdentityCard(_ user: User) -> some View {
+        TijingPaperCard(tint: TijingDesign.sky, rotation: -0.2) {
+            VStack(spacing: 17) {
+                HStack(alignment: .top, spacing: 14) {
+                    ZStack(alignment: .bottomTrailing) {
+                        RemoteAvatar(urlString: user.avatarURL, name: user.nickname, size: 76)
+                            .overlay { Circle().stroke(.white.opacity(0.86), lineWidth: 3) }
+                            .shadow(color: .black.opacity(0.06), radius: 9, y: 4)
+                        if let position = user.position, (1...3).contains(position) {
+                            Image(systemName: position == 1 ? "crown.fill" : "medal.fill")
+                                .font(.caption.bold())
+                                .foregroundStyle(position == 1 ? TijingDesign.amber : TijingDesign.indigo)
+                                .frame(width: 27, height: 27)
+                                .background(.white.opacity(0.90), in: Circle())
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 6) {
+                            Text(user.nickname)
+                                .font(.system(.title2, design: .rounded, weight: .bold))
+                                .lineLimit(1)
+                            if user.isAdmin == true {
+                                Image(systemName: "checkmark.seal.fill").foregroundStyle(TijingDesign.indigo)
+                            }
+                        }
+                        Text(user.bio.flatMap { $0.isEmpty ? nil : $0 } ?? "这个人还没有填写个人简介。")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                        HStack(spacing: 6) {
+                            TijingMicroBadge(title: user.rank, systemImage: "seal.fill", tint: TijingDesign.indigo)
+                            if let position = user.position {
+                                TijingMicroBadge(title: "#\(position)", systemImage: "number", tint: TijingDesign.amber)
+                            }
+                        }
+                    }
+                    Spacer(minLength: 0)
                 }
-            }
-            Text(user.bio.flatMap { $0.isEmpty ? nil : $0 } ?? "这个人还没有填写个人简介。")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-            HStack(spacing: 6) {
-                if let position = user.position, (1...3).contains(position) {
-                    Image(systemName: position == 1 ? "crown.fill" : "medal.fill")
-                        .foregroundStyle(position == 1 ? Color.yellow : Color.secondary)
+
+                Divider().opacity(0.28)
+
+                HStack(spacing: 0) {
+                    compactMetric("\(user.rating)", "竞点", "sparkles", TijingDesign.amber)
+                    Divider().frame(height: 40)
+                    compactMetric("\(Int(user.winRate ?? 0))%", "获胜率", "chart.bar.fill", TijingDesign.mint)
+                    Divider().frame(height: 40)
+                    compactMetric("\(user.questions ?? 0)", "已刷题", "book.closed.fill", TijingDesign.indigo)
+                    Divider().frame(height: 40)
+                    compactMetric("\(user.friendCount ?? 0)", "好友", "person.2.fill", TijingDesign.cyan)
                 }
-                Text("全站第 \(user.position ?? 0) 名 · \(user.rating) 竞点")
-                    .font(.subheadline.weight(.semibold))
-                    .monospacedDigit()
             }
         }
+    }
+
+    private func compactMetric(_ value: String, _ title: String, _ icon: String, _ tint: Color) -> some View {
+        VStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(tint)
+            Text(value)
+                .font(.system(.subheadline, design: .rounded, weight: .bold))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
     }
 
     @ViewBuilder
-    private func interactionSections(_ user: User) -> some View {
+    private func compactActions(_ user: User) -> some View {
         if isSelf {
-            Section("个人资料") {
-                Label("资料编辑请从“我的”页面进入", systemImage: "person.crop.circle")
+            HStack(spacing: 11) {
+                TijingStickerIcon(systemImage: "person.crop.circle.fill", tint: TijingDesign.indigo, background: TijingDesign.butter, size: 40, sparkle: false)
+                Text("这是你的公开资料卡，编辑资料请从“我的”页面进入。")
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
             }
+            .padding(14)
+            .tijingCard()
         } else if user.blockedMe == true {
-            Section("互动") {
-                Label("当前无法与该用户进行好友互动", systemImage: "hand.raised")
+            HStack(spacing: 11) {
+                TijingStickerIcon(systemImage: "hand.raised.fill", tint: TijingDesign.coral, background: TijingDesign.rose, size: 40, sparkle: false)
+                Text("当前无法与该用户进行好友互动。")
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
             }
+            .padding(14)
+            .tijingCard()
         } else if user.blockedByMe == true {
-            Section("互动") {
-                Label("你已拉黑该用户", systemImage: "person.crop.circle.badge.xmark")
-                    .foregroundStyle(.secondary)
-                Button { unblock() } label: {
-                    Label("解除拉黑", systemImage: "arrow.uturn.backward")
-                }
-                .disabled(busy)
+            Button {
+                unblock()
+            } label: {
+                Label("解除拉黑", systemImage: "arrow.uturn.backward")
+                    .frame(maxWidth: .infinity)
             }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .disabled(busy)
         } else {
-            Section("互动") {
-                if user.friendStatus == "friend" {
+            VStack(spacing: 10) {
+                HStack(spacing: 10) {
+                    if user.friendStatus == "friend" {
+                        Button {
+                            Haptics.medium()
+                            inviteTarget = user
+                        } label: {
+                            Label("好友挑战", systemImage: "bolt.horizontal.circle.fill")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+
                     Button {
                         Haptics.selection()
-                        inviteTarget = user
+                        friendAction(user)
                     } label: {
-                        Label("好友挑战", systemImage: "bolt.horizontal.circle.fill")
+                        Label(friendActionTitle(user), systemImage: friendActionIcon(user))
+                            .frame(maxWidth: .infinity)
                     }
+                    .buttonStyle(user.friendStatus == "friend" ? .bordered : .borderedProminent)
+                    .disabled(busy || user.friendStatus == "outgoing")
                 }
+                .controlSize(.large)
 
-                Button { friendAction(user) } label: {
-                    Label(friendActionTitle(user), systemImage: friendActionIcon(user))
-                }
-                .disabled(busy || user.friendStatus == "outgoing")
-            }
+                HStack(spacing: 10) {
+                    Button {
+                        Haptics.light()
+                        showingReport = true
+                    } label: {
+                        Label("举报", systemImage: "flag")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
 
-            Section("安全") {
-                Button { showingReport = true } label: {
-                    Label("举报用户", systemImage: "flag")
-                }
-                Button("拉黑用户", systemImage: "hand.raised", role: .destructive) {
-                    Haptics.warning()
-                    confirmBlock = true
+                    Button(role: .destructive) {
+                        Haptics.warning(); confirmBlock = true
+                    } label: {
+                        Label("拉黑", systemImage: "hand.raised")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
                 }
             }
         }
@@ -601,7 +758,7 @@ struct PublicProfileView: View {
     private func friendActionTitle(_ user: User) -> String {
         switch user.friendStatus {
         case "friend": "删除好友"
-        case "incoming": "接受好友申请"
+        case "incoming": "接受申请"
         case "outgoing": "申请已发送"
         default: "添加好友"
         }
@@ -671,10 +828,8 @@ struct PublicProfileView: View {
             defer { busy = false }
             do {
                 let response: FriendBattleInviteResponse = try await session.api.request(
-                    "/api/battles/friend/invite/\(user.id)",
-                    method: .post,
-                    body: BattleModeBody(rule: "speed", subject: subject, topic: topic),
-                    token: token
+                    "/api/battles/friend/invite/\(user.id)", method: .post,
+                    body: BattleModeBody(rule: "speed", subject: subject, topic: topic), token: token
                 )
                 if response.mode == "friend_challenge", let challengeID = response.challengeID, !challengeID.isEmpty {
                     selectedChallenge = ChallengeRoute(id: challengeID)
@@ -707,26 +862,62 @@ private struct UserReportSheet: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("举报类型") {
-                    Picker("类型", selection: $category) {
-                        ForEach(categories, id: \.0) { item in Text(item.1).tag(item.0) }
+            ZStack {
+                TijingPageBackground()
+                ScrollView {
+                    VStack(spacing: 16) {
+                        TijingPaperCard(tint: TijingDesign.rose, rotation: -0.25) {
+                            HStack(spacing: 13) {
+                                TijingStickerIcon(systemImage: "flag.fill", tint: TijingDesign.coral, background: TijingDesign.rose, size: 48, rotation: -7)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text("举报用户")
+                                        .font(.headline)
+                                    Text("请选择最接近的问题类型，补充说明可以留空。")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer(minLength: 0)
+                            }
+                        }
+
+                        TijingFieldSurface("举报类型") {
+                            Picker("类型", selection: $category) {
+                                ForEach(categories, id: \.0) { item in Text(item.1).tag(item.0) }
+                            }
+                            .pickerStyle(.menu)
+                        }
+
+                        TijingFieldSurface("补充说明（选填）") {
+                            TextField("可说明具体问题", text: $content, axis: .vertical)
+                                .lineLimit(4...8)
+                                .onChange(of: content) { _, value in if value.count > 500 { content = String(value.prefix(500)) } }
+                            Text("\(content.count)/500")
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .trailing)
+                        }
+
+                        if let error {
+                            Label(error, systemImage: "exclamationmark.circle.fill")
+                                .font(.footnote)
+                                .foregroundStyle(.red)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(14)
+                                .tijingCard()
+                        }
                     }
+                    .padding(.horizontal, TijingDesign.pageHorizontalPadding)
+                    .padding(.top, 10)
+                    .padding(.bottom, 28)
                 }
-                Section("补充说明（选填）") {
-                    TextField("可说明具体问题", text: $content, axis: .vertical)
-                        .lineLimit(4...8)
-                        .onChange(of: content) { _, value in if value.count > 500 { content = String(value.prefix(500)) } }
-                    Text("\(content.count)/500").font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .trailing)
-                }
-                if let error { Section { Text(error).foregroundStyle(.red) } }
             }
-            .navigationTitle("举报用户")
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
+            .sensoryFeedback(.selection, trigger: category)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(busy ? "提交中…" : "提交") { submit() }.disabled(busy)
+                    Button(busy ? "提交中…" : "提交") { submit() }.bold().disabled(busy)
                 }
             }
         }

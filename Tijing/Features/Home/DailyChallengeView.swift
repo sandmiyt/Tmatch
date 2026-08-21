@@ -21,7 +21,9 @@ struct DailyChallengeView: View {
     }
 
     var body: some View {
-        Group {
+        ZStack {
+            TijingPageBackground()
+            Group {
             if let detail {
                 if let mine = detail.myAttempt {
                     resultView(detail: detail, mine: mine)
@@ -34,6 +36,7 @@ struct DailyChallengeView: View {
                 ContentUnavailableView("挑战暂不可用", systemImage: "exclamationmark.triangle", description: Text(error))
             } else {
                 ProgressView("正在准备挑战…")
+            }
             }
         }
         .navigationTitle(detail?.isFriend == true ? "好友挑战" : "今日挑战")
@@ -160,19 +163,25 @@ struct DailyChallengeView: View {
     }
 
     private func progressHeader(_ detail: ChallengeDetail, question: ChallengeQuestion) -> some View {
-        HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(detail.isDaily ? "今日挑战" : "好友挑战")
-                    .font(.headline)
-                Text([question.questionType == "judgment" ? "判断题" : "单选题", question.subject, question.topic]
-                    .compactMap { $0?.isEmpty == false ? $0 : nil }.joined(separator: " · "))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+        TijingPaperCard(tint: detail.isDaily ? TijingDesign.butter : TijingDesign.lilac) {
+            VStack(alignment: .leading, spacing: 11) {
+                HStack(spacing: 12) {
+                    TijingStickerIcon(systemImage: detail.isDaily ? "sun.max.fill" : "person.2.fill", tint: detail.isDaily ? TijingDesign.amber : TijingDesign.violet, background: detail.isDaily ? TijingDesign.butter : TijingDesign.lilac, size: 42, rotation: -5, sparkle: false)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(detail.isDaily ? "今日挑战" : "好友挑战")
+                            .font(.headline)
+                        Text([question.questionType == "judgment" ? "判断题" : "单选题", question.subject, question.topic]
+                            .compactMap { $0?.isEmpty == false ? $0 : nil }.joined(separator: " · "))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    Spacer()
+                    TijingMicroBadge(title: "\(index + 1)/\(detail.questionCount)", systemImage: "circle.grid.3x3.fill", tint: TijingDesign.indigo)
+                }
+                ProgressView(value: Double(index + 1), total: Double(max(detail.questionCount, 1)))
+                    .tint(TijingDesign.indigo)
             }
-            Spacer()
-            Text("\(index + 1) / \(detail.questionCount)")
-                .font(.headline.monospacedDigit())
         }
     }
 
@@ -209,9 +218,10 @@ struct DailyChallengeView: View {
                     }
                 }
             }
-            .padding(13)
-            .background(isPicked ? Color.accentColor.opacity(0.1) : Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(isPicked ? Color.accentColor : Color.secondary.opacity(0.18)))
+            .padding(14)
+            .background(isPicked ? Color.accentColor.opacity(0.10) : Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 19, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 19, style: .continuous).stroke(isPicked ? Color.accentColor : Color.secondary.opacity(0.16)))
+            .shadow(color: isPicked ? Color.clear : Color.black.opacity(0.025), radius: 7, y: 3)
             .opacity(isExcluded ? 0.55 : 1)
         }
         .buttonStyle(.plain)
@@ -255,31 +265,45 @@ struct DailyChallengeView: View {
     }
 
     private func resultHero(detail: ChallengeDetail, mine: ChallengeAttempt) -> some View {
-        VStack(spacing: 10) {
-            Image(systemName: outcomeSymbol(detail: detail, mine: mine))
-                .font(.system(size: 44, weight: .semibold))
-                .foregroundStyle(.tint)
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text("\(mine.correctCount)")
-                    .font(.system(size: 56, weight: .black, design: .rounded))
-                    .monospacedDigit()
-                Text("/ \(detail.questionCount)")
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
-            }
-            if let label = outcomeLabel(detail: detail, mine: mine) {
-                Text(label).font(.title3.bold())
-            }
-            Text("用时 \(TijingFormat.duration(milliseconds: mine.elapsedMS))")
-                .font(.subheadline).foregroundStyle(.secondary)
-            if detail.isFriend {
-                Text("好友挑战只比较正确数和用时，不影响竞点")
-                    .font(.caption).foregroundStyle(.secondary)
+        TijingPaperCard(tint: resultTint(detail: detail, mine: mine), rotation: -0.2) {
+            HStack(spacing: 16) {
+                TijingStickerIcon(systemImage: outcomeSymbol(detail: detail, mine: mine), tint: resultAccent(detail: detail, mine: mine), background: resultTint(detail: detail, mine: mine), size: 60, rotation: -7)
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text("\(mine.correctCount)")
+                            .font(.system(size: 48, weight: .bold, design: .rounded))
+                            .monospacedDigit()
+                        Text("/ \(detail.questionCount)")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let label = outcomeLabel(detail: detail, mine: mine) {
+                        Text(label).font(.headline)
+                    }
+                    Text("用时 \(TijingFormat.duration(milliseconds: mine.elapsedMS))")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                    if detail.isFriend {
+                        Text("只比较正确数和用时，不影响竞点")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                Spacer(minLength: 0)
             }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 22)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+
+    private func resultTint(detail: ChallengeDetail, mine: ChallengeAttempt) -> Color {
+        guard let label = outcomeLabel(detail: detail, mine: mine) else { return TijingDesign.sky }
+        if label.contains("胜") { return TijingDesign.sage }
+        if label.contains("负") { return TijingDesign.rose }
+        return TijingDesign.butter
+    }
+
+    private func resultAccent(detail: ChallengeDetail, mine: ChallengeAttempt) -> Color {
+        guard let label = outcomeLabel(detail: detail, mine: mine) else { return TijingDesign.indigo }
+        if label.contains("胜") { return TijingDesign.mint }
+        if label.contains("负") { return TijingDesign.coral }
+        return TijingDesign.amber
     }
 
     private func friendComparison(detail: ChallengeDetail, mine: ChallengeAttempt) -> some View {
