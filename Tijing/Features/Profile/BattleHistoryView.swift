@@ -372,22 +372,83 @@ private struct HistoryBattleReviewPanel: View {
             }
 
             if !review.weakSubjects.isEmpty {
-                VStack(alignment: .leading, spacing: 7) {
-                    Text("本局薄弱模块").font(.subheadline.bold())
-                    ForEach(review.weakSubjects) { item in
-                        HStack {
-                            Text(item.subject)
-                            Spacer()
-                            Text("\(item.wrong)/\(item.total) 错")
-                                .font(.caption.monospacedDigit())
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "scope")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(TijingDesign.coral)
+                            .frame(width: 28, height: 28)
+                            .background(TijingDesign.rose.opacity(0.28), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("本局薄弱模块")
+                                .font(.subheadline.bold())
+                            Text("按本局错题占比整理")
+                                .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }
+                    }
+
+                    ForEach(review.weakSubjects) { item in
+                        weakSubjectRow(item)
                     }
                 }
             }
         }
         .padding(16)
         .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    private func weakSubjectRow(_ item: BattleReviewWeakSubject) -> some View {
+        let ratio = item.total > 0 ? min(max(Double(item.wrong) / Double(item.total), 0), 1) : 0
+        let rate = item.wrongRate ?? Int((ratio * 100).rounded())
+        let tint: Color = rate >= 67 ? TijingDesign.coral : (rate >= 34 ? TijingDesign.amber : TijingDesign.indigo)
+        let status = rate >= 67 ? "优先回看" : (rate >= 34 ? "需要巩固" : "轻度失分")
+
+        return VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 10) {
+                Image(systemName: weakSubjectIcon(item.subject))
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(tint)
+                    .frame(width: 32, height: 32)
+                    .background(tint.opacity(0.11), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.subject)
+                        .font(.subheadline.weight(.semibold))
+                    Text("\(item.wrong) 错 · 共 \(item.total) 题 · \(status)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 8)
+
+                Text("\(rate)%")
+                    .font(.caption.weight(.bold).monospacedDigit())
+                    .foregroundStyle(tint)
+            }
+
+            ProgressView(value: ratio)
+                .tint(tint)
+                .scaleEffect(x: 1, y: 0.78, anchor: .center)
+        }
+        .padding(11)
+        .background(Color(uiColor: .tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(tint.opacity(0.08))
+        }
+    }
+
+    private func weakSubjectIcon(_ name: String) -> String {
+        if name.contains("法律") { return "building.columns.fill" }
+        if name.contains("政治") { return "flag.fill" }
+        if name.contains("经济") { return "chart.line.uptrend.xyaxis" }
+        if name.contains("公文") { return "doc.text.fill" }
+        if name.contains("数量") { return "function" }
+        if name.contains("判断") { return "square.grid.2x2.fill" }
+        if name.contains("资料") { return "chart.bar.fill" }
+        if name.contains("科技") || name.contains("地理") { return "globe.asia.australia.fill" }
+        return "book.closed.fill"
     }
 
     private func keyRoundRow(_ round: BattleReviewRound) -> some View {

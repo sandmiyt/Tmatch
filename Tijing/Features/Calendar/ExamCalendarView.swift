@@ -15,14 +15,7 @@ struct ExamCalendarView: View {
             TijingPageBackground()
             ScrollView {
                 LazyVStack(spacing: 16) {
-                    TijingFieldSurface("筛选") {
-                        Picker("地区", selection: $city) {
-                            Text("全部").tag("全部")
-                            ForEach(response?.cities ?? []) { Text("\($0.name)（\($0.count)）").tag($0.name) }
-                        }
-                        Divider()
-                        Toggle("只看我的关注", isOn: $followedOnly)
-                    }
+                    filterBar
 
                     if let items = response?.items, !items.isEmpty {
                         ForEach(Array(items.enumerated()), id: \.element.id) { index, exam in
@@ -56,6 +49,135 @@ struct ExamCalendarView: View {
             ExamInAppBrowser(url: target.url)
                 .ignoresSafeArea()
         }
+    }
+
+    private var filterBar: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Label("筛选", systemImage: "line.3.horizontal.decrease.circle.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+
+                Spacer(minLength: 8)
+
+                if let count = response?.items.count {
+                    Text("\(count) 场")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                        .contentTransition(.numericText())
+                }
+            }
+
+            HStack(spacing: 9) {
+                Menu {
+                    Button {
+                        city = "全部"
+                    } label: {
+                        Label("全部地区", systemImage: city == "全部" ? "checkmark" : "location")
+                    }
+
+                    if !(response?.cities ?? []).isEmpty {
+                        Divider()
+                    }
+
+                    ForEach(response?.cities ?? []) { item in
+                        Button {
+                            city = item.name
+                        } label: {
+                            HStack {
+                                Text("\(item.name)（\(item.count)）")
+                                if city == item.name { Image(systemName: "checkmark") }
+                            }
+                        }
+                    }
+                } label: {
+                    filterChip(
+                        title: city == "全部" ? "全部地区" : city,
+                        systemImage: "location.fill",
+                        selected: city != "全部",
+                        tint: TijingDesign.indigo,
+                        showsChevron: true
+                    )
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    followedOnly.toggle()
+                    Haptics.selection()
+                } label: {
+                    filterChip(
+                        title: "只看关注",
+                        systemImage: followedOnly ? "star.fill" : "star",
+                        selected: followedOnly,
+                        tint: TijingDesign.amber
+                    )
+                }
+                .buttonStyle(.plain)
+
+                Spacer(minLength: 0)
+
+                if city != "全部" || followedOnly {
+                    Button {
+                        withAnimation(.snappy(duration: 0.28)) {
+                            city = "全部"
+                            followedOnly = false
+                        }
+                        Haptics.selection()
+                    } label: {
+                        Image(systemName: "arrow.counterclockwise")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 34, height: 34)
+                            .background(Color.primary.opacity(0.045), in: Circle())
+                    }
+                    .buttonStyle(TijingPressableCardStyle())
+                    .accessibilityLabel("清除筛选")
+                }
+            }
+        }
+        .padding(14)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 21, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 21, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.055))
+        }
+        .shadow(color: Color.black.opacity(0.035), radius: 12, y: 6)
+        .animation(.snappy(duration: 0.30), value: city)
+        .animation(.snappy(duration: 0.30), value: followedOnly)
+    }
+
+    private func filterChip(
+        title: String,
+        systemImage: String,
+        selected: Bool,
+        tint: Color,
+        showsChevron: Bool = false
+    ) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: systemImage)
+                .font(.caption.weight(.bold))
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+            if showsChevron {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .bold))
+                    .opacity(0.62)
+            }
+        }
+        .foregroundStyle(selected ? tint : Color.primary.opacity(0.76))
+        .padding(.horizontal, 11)
+        .frame(height: 36)
+        .background(
+            selected ? tint.opacity(0.13) : Color.primary.opacity(0.045),
+            in: Capsule()
+        )
+        .overlay {
+            Capsule()
+                .strokeBorder(selected ? tint.opacity(0.16) : Color.primary.opacity(0.035))
+        }
+        .contentShape(Capsule())
     }
 
     private func examCard(_ exam: RecruitmentExam, index: Int) -> some View {

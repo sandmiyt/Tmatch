@@ -64,6 +64,21 @@ struct DailyChallengeView: View {
             VStack(alignment: .leading, spacing: 16) {
                 progressHeader(detail, question: question)
 
+                TijingQuestionToolStrip(
+                    isFavorite: question.favorite == true,
+                    favoriteAction: {
+                        Task { await toggleFavorite(questionID: question.questionID) }
+                    },
+                    correctionAction: {
+                        Haptics.selection()
+                        correctionQuestionID = question.questionID
+                    },
+                    answerSheetAction: {
+                        Haptics.selection()
+                        showingAnswerSheet = true
+                    }
+                )
+
                 if let material = question.material, !material.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("材料").font(.caption.bold()).foregroundStyle(.tint)
@@ -92,26 +107,6 @@ struct DailyChallengeView: View {
                 if let error { Text(error).font(.footnote).foregroundStyle(.red) }
             }
             .padding()
-        }
-        .toolbar {
-            ToolbarItemGroup(placement: .topBarTrailing) {
-                Button {
-                    Task { await toggleFavorite(questionID: question.questionID) }
-                } label: {
-                    Image(systemName: question.favorite == true ? "star.fill" : "star")
-                }
-                .accessibilityLabel(question.favorite == true ? "取消收藏" : "收藏本题")
-
-                Button {
-                    correctionQuestionID = question.questionID
-                } label: { Image(systemName: "exclamationmark.bubble") }
-                .accessibilityLabel("题目纠错")
-
-                Button {
-                    Haptics.selection(); showingAnswerSheet = true
-                } label: { Image(systemName: "square.grid.3x3") }
-                .accessibilityLabel("答题卡")
-            }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             challengeBottomBar(detail)

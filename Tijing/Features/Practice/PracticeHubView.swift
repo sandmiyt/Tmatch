@@ -26,12 +26,9 @@ struct PracticeHubView: View {
                         header
                             .tijingReveal(order: 0)
 
-                        TijingSectionHeading("选择题库", subtitle: "展开题库，直接选择全部章节或具体章节")
-                            .tijingReveal(order: 1)
-
                         ForEach(Array(catalog.enumerated()), id: \.element.id) { offset, subject in
                             subjectCard(subject)
-                                .tijingReveal(order: min(offset + 2, 8))
+                                .tijingReveal(order: min(offset + 1, 8))
                         }
 
                         if let error {
@@ -64,13 +61,8 @@ struct PracticeHubView: View {
 
     private var header: some View {
         HStack(alignment: .center, spacing: 14) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("刷题")
-                    .font(.system(.largeTitle, design: .rounded, weight: .heavy))
-                Text("选好范围，直接开始这一组。")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
+            Text("刷题")
+                .font(.system(.largeTitle, design: .rounded, weight: .heavy))
 
             Spacer(minLength: 8)
 
@@ -78,19 +70,11 @@ struct PracticeHubView: View {
                 Haptics.selection()
                 settingsOpen = true
             } label: {
-                VStack(spacing: 5) {
-                    Image(systemName: "slider.horizontal.3")
-                        .font(.headline.weight(.semibold))
-                    Text("练习设置")
-                        .font(.caption2.weight(.semibold))
-                }
-                .foregroundStyle(Color.accentColor)
-                .frame(width: 72, height: 58)
-                .background(Color.accentColor.opacity(0.10), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .strokeBorder(Color.accentColor.opacity(0.12))
-                }
+                Label("练习设置", systemImage: "slider.horizontal.3")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 8)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(TijingPressableCardStyle())
             .accessibilityLabel("练习设置")

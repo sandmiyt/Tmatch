@@ -170,36 +170,22 @@ struct PracticeSessionView: View {
     }
 
     private func questionTools(_ question: Question) -> some View {
-        HStack(spacing: 10) {
-            PracticeToolButton(
-                title: question.favorite == true ? "已收藏" : "收藏",
-                systemImage: question.favorite == true ? "star.fill" : "star",
-                tint: question.favorite == true ? TijingDesign.amber : TijingDesign.indigo
-            ) {
+        TijingQuestionToolStrip(
+            isFavorite: question.favorite == true,
+            favoriteAction: {
                 Task { await store.toggleFavorite() }
-            }
-
-            PracticeToolButton(
-                title: "纠错",
-                systemImage: "exclamationmark.bubble",
-                tint: TijingDesign.coral
-            ) {
+            },
+            correctionAction: {
                 if let id = store.currentQuestion?.id {
                     Haptics.selection()
                     correctionTarget = CorrectionTarget(id: id)
                 }
-            }
-
-            PracticeToolButton(
-                title: "答题卡",
-                systemImage: "square.grid.3x3",
-                tint: TijingDesign.violet
-            ) {
+            },
+            answerSheetAction: {
                 Haptics.selection()
                 showAnswerSheet = true
             }
-        }
-        .accessibilityElement(children: .contain)
+        )
     }
 
     private func bottomControls(_ question: Question) -> some View {
@@ -465,33 +451,6 @@ struct QuestionCorrectionView: View {
 
 private struct CorrectionBody: Encodable { let category: String; let content: String }
 private struct CorrectionResponse: Decodable { let ok: Bool; let id: Int?; let duplicate: Bool? }
-
-private struct PracticeToolButton: View {
-    let title: String
-    let systemImage: String
-    let tint: Color
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 7) {
-                Image(systemName: systemImage)
-                    .font(.subheadline.weight(.semibold))
-                Text(title)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
-            }
-            .foregroundStyle(tint)
-            .frame(maxWidth: .infinity, minHeight: 44)
-            .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 15, style: .continuous)
-                    .strokeBorder(tint.opacity(0.12))
-            }
-        }
-        .buttonStyle(TijingPressableCardStyle())
-    }
-}
 
 private enum OptionVisualState: Equatable { case normal, selected, correct, wrong }
 

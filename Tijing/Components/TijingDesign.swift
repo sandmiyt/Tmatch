@@ -654,6 +654,89 @@ struct TijingInteractiveAvatar: View {
     }
 }
 
+
+struct TijingQuestionToolStrip: View {
+    let isFavorite: Bool
+    let favoriteAction: () -> Void
+    let correctionAction: () -> Void
+    let answerSheetAction: () -> Void
+
+    var body: some View {
+        HStack(spacing: 5) {
+            tool(
+                title: isFavorite ? "已收藏" : "收藏",
+                systemImage: isFavorite ? "star.fill" : "star",
+                tint: TijingDesign.amber,
+                selected: isFavorite,
+                action: favoriteAction
+            )
+            toolDivider
+            tool(
+                title: "纠错",
+                systemImage: "exclamationmark.bubble",
+                tint: TijingDesign.coral,
+                selected: false,
+                action: correctionAction
+            )
+            toolDivider
+            tool(
+                title: "答题卡",
+                systemImage: "square.grid.3x3",
+                tint: TijingDesign.indigo,
+                selected: false,
+                action: answerSheetAction
+            )
+        }
+        .padding(5)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 19, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 19, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.055))
+        }
+        .shadow(color: Color.black.opacity(0.03), radius: 10, y: 5)
+        .accessibilityElement(children: .contain)
+    }
+
+    private var toolDivider: some View {
+        Rectangle()
+            .fill(Color.primary.opacity(0.07))
+            .frame(width: 1, height: 22)
+    }
+
+    private func tool(
+        title: String,
+        systemImage: String,
+        tint: Color,
+        selected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: systemImage)
+                    .font(.caption.weight(.bold))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(selected ? tint : Color.secondary)
+                    .frame(width: 28, height: 28)
+                    .background(
+                        selected ? tint.opacity(0.15) : Color.primary.opacity(0.045),
+                        in: Circle()
+                    )
+
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(selected ? tint : Color.primary.opacity(0.76))
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, minHeight: 40)
+            .padding(.horizontal, 4)
+            .background(selected ? tint.opacity(0.07) : Color.clear, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(TijingPressableCardStyle())
+        .accessibilityLabel(title)
+    }
+}
+
 struct TijingMatchmakingPulse: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var tint: Color = .white
