@@ -1,0 +1,83 @@
+name: iOS Xcode Build
+
+on:
+  push:
+    paths:
+      - 'Tijing/**'
+      - 'Tijing.xcodeproj/**'
+      - '.github/workflows/ios-build.yml'
+  pull_request:
+    paths:
+      - 'Tijing/**'
+      - 'Tijing.xcodeproj/**'
+      - '.github/workflows/ios-build.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Xcode and project configuration
+        run: |
+          xcodebuild -version
+          xcodebuild -project Tijing.xcodeproj -scheme Tijing -list
+
+      - name: Build with iPhone device SDK first
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project Tijing.xcodeproj \
+            -scheme Tijing \
+            -configuration Debug \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build 2>&1 | tee xcodebuild-device.log
+
+      - name: Build for iOS Simulator after device SDK passes
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project Tijing.xcodeproj \
+            -scheme Tijing \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build 2>&1 | tee xcodebuild-simulator.log
+
+      - name: Surface real compiler errors first
+        if: failure()
+        run: |
+          echo '===== device SDK compiler error: lines ====='
+          if [ -f xcodebuild-device.log ]; then
+            grep -nE '(^|[[:space:]])error:' xcodebuild-device.log | head -120 || true
+          fi
+          echo '===== simulator compiler error: lines ====='
+          if [ -f xcodebuild-simulator.log ]; then
+            grep -nE '(^|[[:space:]])error:' xcodebuild-simulator.log | head -120 || true
+          fi
+          echo '===== latest build tail ====='
+          if [ -f xcodebuild-simulator.log ]; then
+            tail -120 xcodebuild-simulator.log
+          elif [ -f xcodebuild-device.log ]; then
+            tail -120 xcodebuild-device.log
+          fi
+
+      - name: Upload Xcode build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-logs
+          path: |
+            xcodebuild-device.log
+            xcodebuild-simulator.log
+          if-no-files-found: ignore
+          retention-days: 7

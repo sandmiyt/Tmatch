@@ -1,0 +1,546 @@
+import SwiftUI
+
+struct PracticeSessionView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State var store: PracticeSessionStore
+    @State private var confirmQuit = false
+    @State private var confirmSubmit = false
+    @State private var showAnswerSheet = false
+    @State private var correctionTarget: CorrectionTarget?
+
+    var body: some View {
+        Group {
+            if store.isLoading && store.questions.isEmpty {
+                ProgressView("正在读取题组")
+            } else if let error = store.error, store.questions.isEmpty {
+                ContentUnavailableView("题组读取失败", systemImage: "exclamationmark.triangle", description: Text(error))
+            } else if store.questions.isEmpty {
+                ContentUnavailableView {
+                    Label(emptyTitle, systemImage: "checkmark.circle")
+                } description: {
+                    Text(emptyDescription)
+                }
+            } else if let question = store.currentQuestion {
+                questionContent(question)
+            }
+        }
+        .navigationTitle(store.mode.title)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)
+        .navigationBarBackButtonHidden(!store.questions.isEmpty && store.batchResult == nil)
+        .toolbar {
+            if !store.questions.isEmpty {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        confirmQuit = true
+                    } label: { Image(systemName: "xmark") }
+                    .accessibilityLabel("退出本组")
+                }
+                ToolbarItem(placement: .principal) {
+                    Text(store.progressText).font(.headline.monospacedDigit())
+                }
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    if store.mode != .exam {
+                        Button { Task { await store.toggleFavorite() } } label: {
+                            Image(systemName: store.currentQuestion?.favorite == true ? "star.fill" : "star")
+                        }
+                        .accessibilityLabel(store.currentQuestion?.favorite == true ? "取消收藏" : "收藏本题")
+                    }
+                    Button {
+                        if let id = store.currentQuestion?.id { correctionTarget = CorrectionTarget(id: id) }
+                    } label: { Image(systemName: "flag") }
+                    .accessibilityLabel("题目纠错")
+                    Button { showAnswerSheet = true } label: { Image(systemName: "square.grid.3x3") }
+                        .accessibilityLabel("答题卡")
+                }
+            }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if let question = store.currentQuestion, store.batchResult == nil {
+                bottomControls(question)
+            }
+        }
+        .task { await store.load() }
+        .confirmationDialog("退出当前题组？", isPresented: $confirmQuit, titleVisibility: .visible) {
+            Button("保留进度并退出") { dismiss() }
+            Button("放弃本组进度", role: .destructive) { store.clearResume(); dismiss() }
+            Button("继续答题", role: .cancel) {}
+        } message: {
+            Text("保留进度后，下次进入同一练习范围会继续当前题组，不受后来修改练习设置影响。")
+        }
+        .confirmationDialog("确认交卷？", isPresented: $confirmSubmit, titleVisibility: .visible) {
+            Button("确认交卷") { Task { await store.submitBatch() } }
+            Button("继续答题", role: .cancel) {}
+        } message: {
+            Text("还有 \(store.unansweredCount) 题未作答，未作答将按错误记录。")
+        }
+        .sheet(isPresented: $showAnswerSheet) {
+            PracticeAnswerSheet(store: store)
+                .presentationDetents([.medium, .large])
+        }
+        .sheet(item: $correctionTarget) { target in
+            QuestionCorrectionView(questionID: target.id)
+                .presentationDetents([.medium])
+        }
+        .sheet(isPresented: $store.showBatchResult) {
+            if let result = store.batchResult {
+                PracticeBatchResultView(result: result, questions: store.questions) {
+                    store.showBatchResult = false
+                    dismiss()
+                }
+            }
+        }
+    }
+
+    private func questionContent(_ question: Question) -> some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 18) {
+                ProgressView(value: Double(store.index + 1), total: Double(max(store.questions.count, 1)))
+                    .tint(.accentColor)
+                    .accessibilityLabel("答题进度")
+                    .accessibilityValue(store.progressText)
+
+                if let material = question.material, !material.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(material)
+                        .font(.body)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(16)
+                        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    QuestionMediaStrip(urls: question.media?.material ?? [])
+                }
+
+                Text(question.stem)
+                    .font(.title3.weight(.semibold))
+                    .textSelection(.disabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                QuestionMediaStrip(urls: question.media?.stem ?? [])
+
+                VStack(spacing: 12) {
+                    ForEach(question.options.indices, id: \.self) { index in
+                        OptionRow(
+                            letter: TijingFormat.optionLetter(index),
+                            text: question.options[index],
+                            media: optionMedia(question, index: index),
+                            state: optionState(question, displayIndex: index),
+                            excluded: store.excludedIndices(for: question).contains(index),
+                            tap: { Task { await store.tapOption(index) } },
+                            longPress: { store.toggleExcluded(index) }
+                        )
+                    }
+                }
+
+                if let feedback = store.feedbackForCurrent() {
+                    FeedbackCard(question: question, feedback: feedback)
+                }
+
+                if let error = store.error {
+                    Label(error, systemImage: "exclamationmark.triangle.fill")
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                }
+
+            }
+            .padding(.horizontal)
+            .padding(.bottom, 32)
+        }
+        .scrollDismissesKeyboard(.interactively)
+    }
+
+    private func bottomControls(_ question: Question) -> some View {
+        VStack(spacing: 10) {
+            if store.isDeferred && store.isLast {
+                Button {
+                    if store.unansweredCount > 0 {
+                        confirmSubmit = true
+                    } else {
+                        Task { await store.submitBatch() }
+                    }
+                } label: {
+                    HStack {
+                        if store.isSubmitting { ProgressView().controlSize(.small) }
+                        Text(store.mode == .exam ? "交卷" : "提交本组")
+                            .fontWeight(.semibold)
+                        Spacer()
+                        Image(systemName: "checkmark.seal")
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(store.isSubmitting)
+            } else if question.isMultiple && store.mode != .exam && store.feedbackForCurrent() == nil {
+                Button {
+                    Task { await store.confirmMultiple() }
+                } label: {
+                    HStack {
+                        if store.isSubmitting { ProgressView().controlSize(.small) }
+                        Text(store.settings.answerMode == "submit" ? "确认本题" : "确认答案")
+                            .fontWeight(.semibold)
+                        Spacer()
+                        Image(systemName: "checkmark.circle")
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(store.selectedDisplayIndices(for: question).isEmpty || store.isSubmitting)
+            } else if store.isImmediate && store.isLast && store.feedbackForCurrent() != nil {
+                Button {
+                    Task { await store.finishImmediateReview() }
+                } label: {
+                    HStack {
+                        if store.isSubmitting { ProgressView().controlSize(.small) }
+                        Text("完成本组")
+                            .fontWeight(.semibold)
+                        Spacer()
+                        Image(systemName: "checkmark.seal")
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(store.isSubmitting)
+            }
+
+            HStack(spacing: 12) {
+                Button {
+                    store.previous()
+                } label: {
+                    Label("上一题", systemImage: "chevron.left")
+                }
+                .buttonStyle(.bordered)
+                .disabled(!store.canGoBack)
+
+                Spacer(minLength: 12)
+
+                if store.mode == .exam, store.canGoNext {
+                    Button {
+                        store.next()
+                    } label: {
+                        Label("下一题", systemImage: "chevron.right")
+                    }
+                    .buttonStyle(.borderedProminent)
+                } else if store.isImmediate, store.feedbackForCurrent() != nil, store.canGoNext {
+                    Button {
+                        store.next()
+                    } label: {
+                        Label("下一题", systemImage: "chevron.right")
+                    }
+                    .buttonStyle(.borderedProminent)
+                } else if store.settings.answerMode == "submit", store.canGoNext {
+                    Button {
+                        store.next()
+                    } label: {
+                        Label("下一题", systemImage: "chevron.right")
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+            .controlSize(.large)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
+        .background(.regularMaterial)
+        .overlay(alignment: .top) { Divider() }
+    }
+
+    private func optionMedia(_ question: Question, index: Int) -> [String] {
+        guard let values = question.media?.options, values.indices.contains(index) else { return [] }
+        return values[index]
+    }
+
+    private func optionState(_ question: Question, displayIndex: Int) -> OptionVisualState {
+        let selected = store.selectedDisplayIndices(for: question).contains(displayIndex)
+        guard let feedback = store.feedbackForCurrent() else { return selected ? .selected : .normal }
+        let originals = feedback.answers ?? feedback.answer.map { [$0] } ?? []
+        let correctDisplay = Set(question.displayIndices(fromOriginal: originals))
+        if correctDisplay.contains(displayIndex) { return .correct }
+        if selected && !feedback.correct { return .wrong }
+        return .normal
+    }
+
+    private var emptyTitle: String {
+        switch store.mode {
+        case .wrong: "暂无错题"
+        case .favorite: "暂无收藏题"
+        case .smartReview: "暂无到期复习"
+        default: "当前范围暂无可用题目"
+        }
+    }
+
+    private var emptyDescription: String {
+        switch store.mode {
+        case .wrong: "答错的题会自动进入错题重练。"
+        case .favorite: "刷题时点击星标即可收藏。"
+        case .smartReview: "需要复习的题会按计划出现在这里。"
+        default: "可以返回重新选择题库或调整设置。"
+        }
+    }
+}
+
+private struct CorrectionTarget: Identifiable { let id: Int }
+
+private struct PracticeAnswerSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let store: PracticeSessionStore
+    private let columns = [GridItem(.adaptive(minimum: 44), spacing: 10)]
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                LazyVGrid(columns: columns, spacing: 10) {
+                    ForEach(Array(store.questions.enumerated()), id: \.element.id) { offset, question in
+                        Button {
+                            store.go(to: offset)
+                            dismiss()
+                        } label: {
+                            Text("\(offset + 1)")
+                                .font(.headline.monospacedDigit())
+                                .frame(maxWidth: .infinity, minHeight: 44)
+                                .background(offset == store.index ? Color.accentColor : (store.isAnswered(question) ? Color.accentColor.opacity(0.14) : Color.secondary.opacity(0.08)), in: RoundedRectangle(cornerRadius: 12))
+                                .foregroundStyle(offset == store.index ? Color.white : Color.primary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle("答题卡")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
+        }
+    }
+}
+
+struct QuestionCorrectionView: View {
+    @Environment(SessionStore.self) private var session
+    @Environment(\.dismiss) private var dismiss
+    let questionID: Int
+    @State private var category = "answer"
+    @State private var content = ""
+    @State private var busy = false
+    @State private var error: String?
+
+    private let categories = [
+        ("answer", "答案错误"), ("explanation", "解析错误"), ("stem", "题干错误"),
+        ("option", "选项错误"), ("source", "来源问题"), ("other", "其他")
+    ]
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("问题类型") {
+                    Picker("问题类型", selection: $category) {
+                        ForEach(categories, id: \.0) { value, title in Text(title).tag(value) }
+                    }
+                }
+                Section("补充说明（可选）") {
+                    TextField("例如：正确答案应该是 B，解析中的法条引用有误……", text: $content, axis: .vertical)
+                        .lineLimit(3...6)
+                        .onChange(of: content) { _, value in
+                            if value.count > 500 { content = String(value.prefix(500)) }
+                        }
+                }
+                if let error { Text(error).foregroundStyle(.red) }
+                Section {
+                    Text("只提交问题，不会自动修改题目；管理员复核后再处理。")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+            }
+            .navigationTitle("题目纠错")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("提交") { Task { await submit() } }.disabled(busy)
+                }
+            }
+        }
+    }
+
+    @MainActor private func submit() async {
+        guard let token = session.token else { return }
+        busy = true; error = nil; defer { busy = false }
+        do {
+            let _: CorrectionResponse = try await session.api.request(
+                "/api/questions/\(questionID)/corrections",
+                method: .post,
+                body: CorrectionBody(category: category, content: content.trimmingCharacters(in: .whitespacesAndNewlines)),
+                token: token
+            )
+            Haptics.success()
+            dismiss()
+        } catch {
+            self.error = error.localizedDescription
+            Haptics.error()
+        }
+    }
+}
+
+private struct CorrectionBody: Encodable { let category: String; let content: String }
+private struct CorrectionResponse: Decodable { let ok: Bool; let id: Int?; let duplicate: Bool? }
+
+private enum OptionVisualState { case normal, selected, correct, wrong }
+
+private struct OptionRow: View {
+    let letter: String
+    let text: String
+    let media: [String]
+    let state: OptionVisualState
+    let excluded: Bool
+    let tap: () -> Void
+    let longPress: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 12) {
+                Text(letter)
+                    .font(.subheadline.bold())
+                    .frame(width: 30, height: 30)
+                    .background(circleBackground, in: Circle())
+                    .foregroundStyle(circleForeground)
+                Text(text)
+                    .font(.body)
+                    .foregroundStyle(excluded ? .secondary : .primary)
+                    .strikethrough(excluded)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            QuestionMediaStrip(urls: media)
+        }
+        .padding(14)
+        .background(background, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(border, lineWidth: state == .normal ? 0.5 : 1.5))
+        .contentShape(Rectangle())
+        .onTapGesture { if !excluded { tap() } }
+        .onLongPressGesture(minimumDuration: 0.45, perform: longPress)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityHint("轻点选择，长按排除或恢复该选项")
+    }
+
+    private var background: Color {
+        switch state {
+        case .normal: .clear
+        case .selected: Color.accentColor.opacity(0.10)
+        case .correct: Color.green.opacity(0.12)
+        case .wrong: Color.red.opacity(0.10)
+        }
+    }
+    private var border: Color {
+        switch state {
+        case .normal: Color.secondary.opacity(0.22)
+        case .selected: .accentColor
+        case .correct: .green
+        case .wrong: .red
+        }
+    }
+    private var circleBackground: Color {
+        switch state { case .correct: .green; case .wrong: .red; case .selected: .accentColor; case .normal: .secondary.opacity(0.12) }
+    }
+    private var circleForeground: Color { state == .normal ? .primary : .white }
+}
+
+private struct FeedbackCard: View {
+    let question: Question
+    let feedback: AnswerFeedback
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 13) {
+            Label(feedback.correct ? "回答正确" : "回答错误", systemImage: feedback.correct ? "checkmark.circle.fill" : "xmark.circle.fill")
+                .font(.headline)
+                .foregroundStyle(feedback.correct ? Color.green : Color.red)
+
+            let answers = feedback.answers ?? feedback.answer.map { [$0] } ?? []
+            let displayAnswers = question.displayIndices(fromOriginal: answers)
+            Text("正确答案：\(answerLetters(displayAnswers))")
+                .font(.subheadline.bold())
+
+            if let explanation = feedback.explanation, !explanation.isEmpty {
+                Text("解析").font(.headline)
+                Text(remapExplanation(explanation)).font(.body)
+                QuestionMediaStrip(urls: feedback.media?.explanation ?? [])
+            }
+
+            if let keypoints = feedback.keypoints, !keypoints.isEmpty {
+                Text("考点：\(keypoints.joined(separator: " · "))")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
+            HStack(spacing: 14) {
+                if let ratio = feedback.correctRatio { Label("正确率 \(TijingFormat.percent(ratio))", systemImage: "chart.bar") }
+                if let elapsed = feedback.elapsedMS { Label(TijingFormat.duration(milliseconds: elapsed), systemImage: "timer") }
+            }
+            .font(.caption).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    private func answerLetters(_ values: [Int]) -> String {
+        values.sorted().map { index in TijingFormat.optionLetter(index) }.joined(separator: "、")
+    }
+
+    private func remapExplanation(_ text: String) -> String {
+        guard let order = question.optionOrder, order.count == question.options.count else { return text }
+        var inverse: [Int: Int] = [:]
+        for (display, original) in order.enumerated() { inverse[original] = display }
+        let pattern = #"(?<![A-Za-z])([A-E])(?![A-Za-z])"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return text }
+        let ns = text as NSString
+        let matches = regex.matches(in: text, range: NSRange(location: 0, length: ns.length)).reversed()
+        var result = text
+        for match in matches {
+            guard match.numberOfRanges > 1 else { continue }
+            let range = match.range(at: 1)
+            let letter = ns.substring(with: range)
+            guard let scalar = letter.unicodeScalars.first, let display = inverse[Int(scalar.value) - 65] else { continue }
+            let replacement = TijingFormat.optionLetter(display)
+            if let swiftRange = Range(range, in: result) { result.replaceSubrange(swiftRange, with: replacement) }
+        }
+        return result
+    }
+}
+
+private struct PracticeBatchResultView: View {
+    let result: PracticeBatchResult
+    let questions: [Question]
+    let done: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    HStack {
+                        VStack(alignment: .leading) {
+                            Text("\(result.score)").font(.system(size: 46, weight: .black, design: .rounded)).monospacedDigit()
+                            Text("得分").foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Text("\(result.correct) / \(result.total) 正确")
+                            .font(.headline.monospacedDigit())
+                    }
+                    .padding(.vertical, 8)
+                }
+                Section("答题详情") {
+                    ForEach(Array(result.details.enumerated()), id: \.element.id) { offset, item in
+                        VStack(alignment: .leading, spacing: 7) {
+                            Label("第 \(offset + 1) 题 · \(item.correct ? "正确" : "错误")", systemImage: item.correct ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                .foregroundStyle(item.correct ? Color.green : Color.red)
+                            Text(item.stem ?? question(item.questionID)?.stem ?? "题目")
+                                .font(.subheadline).lineLimit(3)
+                            if !item.correct, let explanation = item.explanation, !explanation.isEmpty {
+                                Text(explanation).font(.caption).foregroundStyle(.secondary).lineLimit(4)
+                            }
+                        }
+                        .padding(.vertical, 5)
+                    }
+                }
+            }
+            .navigationTitle("练习结果")
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成", action: done).bold() } }
+        }
+    }
+
+    private func question(_ id: Int) -> Question? { questions.first { $0.id == id } }
+}
