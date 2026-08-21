@@ -29,3 +29,16 @@ struct RealtimeFallbackResponse: Decodable {
 struct PendingInviteResponse: Decodable {
     let invite: FriendBattleInvite?
 }
+struct FriendBattleInviteResponse: Decodable {
+    let ok: Bool?
+    let mode: String?
+    let challengeID: String?
+    let roomID: String?
+
+    enum CodingKeys: String, CodingKey {
+        case ok, mode
+        case challengeID = "challenge_id"
+        case roomID = "room_id"
+    }
+}
+

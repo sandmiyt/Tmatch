@@ -179,7 +179,7 @@ struct RankingView: View {
             } else {
                 seasonMe = nil
             }
-        } catch { error = error.localizedDescription }
+        } catch { self.error = error.localizedDescription }
     }
 }
 

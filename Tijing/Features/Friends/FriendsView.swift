@@ -362,4 +362,3 @@ struct FriendChallengeSetupSheet: View {
 
 private struct BlockedResponse: Decodable { let items: [BlockedItem] }
 private struct BlockedItem: Decodable, Identifiable { let id: Int; let user: User; let createdAt: String?; enum CodingKeys: String, CodingKey { case id, user; case createdAt = "created_at" } }
-private struct FriendBattleInviteResponse: Decodable { let ok: Bool?; let mode: String?; let challengeID: String?; let roomID: String?; enum CodingKeys: String, CodingKey { case ok, mode; case challengeID = "challenge_id"; case roomID = "room_id" } }
