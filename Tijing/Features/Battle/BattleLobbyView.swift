@@ -9,6 +9,7 @@ struct BattleLobbyView: View {
     @State private var joinCode = ""
     @State private var error: String?
     @State private var matchTask: Task<Void, Never>?
+    @State private var matchClockTask: Task<Void, Never>?
     @State private var catalog: [PracticeSubject] = []
     @State private var subject = ""
     @State private var topic = ""
@@ -368,12 +369,14 @@ struct BattleLobbyView: View {
         matchWaitSeconds = 0
         matchStartedAt = Date()
         matchStatus = "正在寻找 \(scopeLabel) · 排位赛对手…" + (topic.isEmpty ? "" : "\n（60秒未匹配将自动扩大到本题库全部章节）")
+        startMatchClock()
         matchTask = Task { await matchLoop() }
     }
 
     private func cancelMatch() {
         matching = false
         matchTask?.cancel(); matchTask = nil
+        matchClockTask?.cancel(); matchClockTask = nil
         matchStatus = ""
         matchWaitSeconds = 0
         matchStartedAt = nil
@@ -383,14 +386,36 @@ struct BattleLobbyView: View {
         Haptics.selection()
     }
 
+    private func startMatchClock() {
+        matchClockTask?.cancel()
+        matchClockTask = Task { @MainActor in
+            while !Task.isCancelled {
+                guard matching, let startedAt = matchStartedAt else { return }
+                // UI time is driven locally, so a slow request cannot make the
+                // counter jump by two seconds. Server time still wins if it is ahead.
+                matchWaitSeconds = max(matchWaitSeconds, Int(Date().timeIntervalSince(startedAt)))
+                do {
+                    try await Task.sleep(for: .milliseconds(200))
+                } catch {
+                    return
+                }
+            }
+        }
+    }
+
     @MainActor private func matchLoop() async {
-        guard let token = session.token else { return }
+        guard let token = session.token else {
+            matching = false
+            matchClockTask?.cancel(); matchClockTask = nil
+            return
+        }
         let body = battleBody()
         while !Task.isCancelled && matching {
             do {
                 let response: MatchmakingResponse = try await session.api.request("/api/matchmaking/join", method: .post, body: body, token: token)
                 if response.status == "error" {
                     matching = false
+                    matchClockTask?.cancel(); matchClockTask = nil
                     error = response.error ?? "当前题库无法匹配"
                     Haptics.error()
                     return
@@ -398,6 +423,7 @@ struct BattleLobbyView: View {
                 if response.status == "matched", let id = response.roomID ?? response.state?.roomID {
                     matching = false
                     matchTask = nil
+                    matchClockTask?.cancel(); matchClockTask = nil
                     roomID = id
                     matchStatus = ""
                     Haptics.success()
