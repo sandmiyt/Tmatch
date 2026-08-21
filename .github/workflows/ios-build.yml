@@ -1,4 +1,4 @@
-name: iOS Xcode Build
+name: iOS Build & Unsigned IPA
 
 on:
   push:
@@ -16,12 +16,70 @@ on:
 jobs:
   build:
     runs-on: macos-15
-    timeout-minutes: 20
+    timeout-minutes: 25
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Show Xcode version
         run: xcodebuild -version
-      - name: Build iPhone app for Simulator
+
+      - name: Build Release for iPhone device SDK
+        run: |
+          set -o pipefail
+          rm -rf DerivedData ipa Tijing-unsigned.ipa
+
+          xcodebuild \
+            -project Tijing.xcodeproj \
+            -scheme Tijing \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$PWD/DerivedData" \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build 2>&1 | tee xcodebuild-device.log
+
+      - name: Package unsigned IPA
+        run: |
+          set -euo pipefail
+
+          APP_PATH="$PWD/DerivedData/Build/Products/Release-iphoneos/Tijing.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "error: Built app not found at $APP_PATH"
+            find "$PWD/DerivedData/Build/Products" -maxdepth 3 -type d -name '*.app' -print || true
+            exit 1
+          fi
+
+          rm -rf "$PWD/ipa"
+          mkdir -p "$PWD/ipa/Payload"
+          cp -R "$APP_PATH" "$PWD/ipa/Payload/Tijing.app"
+
+          # Keep the package explicitly unsigned so the user can sign it later.
+          rm -rf "$PWD/ipa/Payload/Tijing.app/_CodeSignature"
+          rm -f "$PWD/ipa/Payload/Tijing.app/embedded.mobileprovision"
+
+          (
+            cd "$PWD/ipa"
+            /usr/bin/zip -qry "$PWD/Tijing-unsigned.ipa" Payload
+          )
+
+          echo "Generated IPA:"
+          ls -lh "$PWD/Tijing-unsigned.ipa"
+          shasum -a 256 "$PWD/Tijing-unsigned.ipa"
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tijing-unsigned-ipa
+          path: Tijing-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Build Debug for Simulator
         run: |
           set -o pipefail
           xcodebuild \
@@ -31,18 +89,32 @@ jobs:
             -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO \
-            build | tee xcodebuild.log
+            build 2>&1 | tee xcodebuild-simulator.log
+
       - name: Surface real compiler errors first
         if: failure()
         run: |
-          echo '===== compiler error: lines ====='
-          grep -nE '(^|[[:space:]])error:' xcodebuild.log | head -120 || true
-          echo '===== tail ====='
-          tail -120 xcodebuild.log || true
-      - name: Upload build log on failure
+          echo '===== iPhone device compiler error: lines ====='
+          if [ -f xcodebuild-device.log ]; then
+            grep -nE '(^|[[:space:]])error:' xcodebuild-device.log | head -120 || true
+            echo '===== iPhone device log tail ====='
+            tail -120 xcodebuild-device.log || true
+          fi
+
+          echo '===== Simulator compiler error: lines ====='
+          if [ -f xcodebuild-simulator.log ]; then
+            grep -nE '(^|[[:space:]])error:' xcodebuild-simulator.log | head -120 || true
+            echo '===== Simulator log tail ====='
+            tail -120 xcodebuild-simulator.log || true
+          fi
+
+      - name: Upload build logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: xcodebuild-log
-          path: xcodebuild.log
+          name: xcodebuild-logs
+          path: |
+            xcodebuild-device.log
+            xcodebuild-simulator.log
+          if-no-files-found: ignore
           retention-days: 7
