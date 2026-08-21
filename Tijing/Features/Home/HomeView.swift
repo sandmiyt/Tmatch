@@ -6,6 +6,8 @@ struct HomeView: View {
     @Binding var showingAuth: Bool
     @State private var loadError: String?
     @State private var calendarCarouselIndex = 0
+    @State private var continueHeroFloating = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var stats: StatsResponse? { session.homeStats }
     private var smartReview: SmartReviewSummary? { session.homeSmartReview }
@@ -103,7 +105,7 @@ struct HomeView: View {
         } label: {
             TijingHeroCard(
                 gradient: LinearGradient(
-                    colors: [Color(red: 0.20, green: 0.22, blue: 0.55), TijingDesign.indigo, TijingDesign.violet.opacity(0.92)],
+                    colors: [Color(red: 0.10, green: 0.45, blue: 0.66), Color(red: 0.18, green: 0.58, blue: 0.62), Color(red: 0.28, green: 0.48, blue: 0.72)],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
@@ -135,6 +137,12 @@ struct HomeView: View {
         }
         .buttonStyle(TijingPressableCardStyle())
         .tijingTactileLink()
+        .onAppear {
+            guard !continueHeroFloating, !reduceMotion else { return }
+            withAnimation(.easeInOut(duration: 2.8).repeatForever(autoreverses: true)) {
+                continueHeroFloating = true
+            }
+        }
     }
 
     private var livelyHeroCopy: some View {
@@ -187,13 +195,13 @@ struct HomeView: View {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(.white.opacity(0.11))
                 .frame(width: 110, height: 132)
-                .rotationEffect(.degrees(7))
-                .offset(x: 7, y: 3)
+                .rotationEffect(.degrees(continueHeroFloating ? 5 : 7))
+                .offset(x: 7, y: continueHeroFloating ? -1 : 4)
 
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(.white.opacity(0.18))
                 .frame(width: 110, height: 132)
-                .rotationEffect(.degrees(-3))
+                .rotationEffect(.degrees(continueHeroFloating ? -1.5 : -3))
                 .overlay {
                     VStack(spacing: 10) {
                         TijingProgressRing(
@@ -210,6 +218,7 @@ struct HomeView: View {
                 }
         }
         .frame(width: 126, height: 144)
+        .scaleEffect(continueHeroFloating ? 1.018 : 0.992)
     }
 
     private var todaySection: some View {

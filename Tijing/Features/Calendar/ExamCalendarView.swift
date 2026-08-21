@@ -10,6 +10,8 @@ struct ExamCalendarView: View {
     @State private var error: String?
     @State private var browserTarget: ExamBrowserTarget?
     @State private var selectedExam: RecruitmentExam?
+    @State private var followedItems: [RecruitmentExam] = []
+    @State private var followedCarouselIndex = 0
 
     var body: some View {
         ZStack {
@@ -17,6 +19,10 @@ struct ExamCalendarView: View {
             ScrollView {
                 LazyVStack(spacing: 16) {
                     filterBar
+
+                    if session.isAuthenticated {
+                        followedCarousel
+                    }
 
                     if let items = response?.items, !items.isEmpty {
                         ForEach(Array(items.enumerated()), id: \.element.id) { index, exam in
@@ -43,6 +49,7 @@ struct ExamCalendarView: View {
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .task(id: city + String(followedOnly)) { await load() }
+        .task(id: followedItems.map(\.id)) { await runFollowedCarousel() }
         .refreshable { await load() }
         .sensoryFeedback(.selection, trigger: city)
         .sensoryFeedback(.selection, trigger: followedOnly)
@@ -254,6 +261,75 @@ struct ExamCalendarView: View {
         }
     }
 
+    @ViewBuilder
+    private var followedCarousel: some View {
+        if followedItems.isEmpty {
+            EmptyView()
+        } else {
+            let safeIndex = min(followedCarouselIndex, max(0, followedItems.count - 1))
+            let exam = followedItems[safeIndex]
+            Button {
+                Haptics.selection()
+                selectedExam = exam
+            } label: {
+                TijingPaperCard(tint: TijingDesign.butter, rotation: -0.12) {
+                    HStack(spacing: 13) {
+                        TijingStickerIcon(systemImage: "star.fill", tint: TijingDesign.amber, background: TijingDesign.butter, size: 46, rotation: -6)
+                        VStack(alignment: .leading, spacing: 5) {
+                            HStack(spacing: 7) {
+                                Text("我的关注")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(TijingDesign.amber)
+                                if followedItems.count > 1 {
+                                    Text("\(safeIndex + 1)/\(followedItems.count)")
+                                        .font(.caption2.monospacedDigit())
+                                        .foregroundStyle(.tertiary)
+                                }
+                            }
+                            Text(exam.title)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.primary)
+                                .lineLimit(2)
+                            HStack(spacing: 6) {
+                                if let label = exam.nextLabel, !label.isEmpty { Text(label) }
+                                if let days = exam.daysToNext {
+                                    if exam.nextLabel?.isEmpty == false { Text("·") }
+                                    Text(days <= 0 ? "就在今天" : "还有 \(days) 天")
+                                }
+                            }
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 4)
+                        Image(systemName: "chevron.right")
+                            .font(.caption.bold())
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .id(exam.id)
+                .transition(.asymmetric(
+                    insertion: .move(edge: .trailing).combined(with: .opacity),
+                    removal: .move(edge: .leading).combined(with: .opacity)
+                ))
+            }
+            .buttonStyle(TijingPressableCardStyle())
+            .animation(.snappy(duration: 0.42), value: followedCarouselIndex)
+        }
+    }
+
+    @MainActor
+    private func runFollowedCarousel() async {
+        guard followedItems.count > 1 else { followedCarouselIndex = 0; return }
+        followedCarouselIndex = min(followedCarouselIndex, followedItems.count - 1)
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(4.5))
+            guard !Task.isCancelled, followedItems.count > 1 else { return }
+            withAnimation(.snappy(duration: 0.42)) {
+                followedCarouselIndex = (followedCarouselIndex + 1) % followedItems.count
+            }
+        }
+    }
+
     @MainActor private func load() async {
         let path = session.token == nil ? "/api/exams/calendar" : "/api/exams/calendar/me"
         var query: [URLQueryItem] = []
@@ -269,6 +345,21 @@ struct ExamCalendarView: View {
             response = try await session.api.requestCached(
                 path, token: session.token, query: query, cacheKey: cacheKey
             )
+            if let token = session.token {
+                let followedQuery = [URLQueryItem(name: "followed_only", value: "true")]
+                if let followedResponse: ExamCalendarResponse = try? await session.api.requestCached(
+                    "/api/exams/calendar/me",
+                    token: token,
+                    query: followedQuery,
+                    cacheKey: "calendar.\(owner).followed.carousel"
+                ) {
+                    followedItems = followedResponse.items.filter { $0.followed != false }
+                    if followedCarouselIndex >= followedItems.count { followedCarouselIndex = 0 }
+                }
+            } else {
+                followedItems = []
+                followedCarouselIndex = 0
+            }
             error = nil
         } catch {
             self.error = response == nil ? error.localizedDescription : nil
@@ -379,7 +470,7 @@ private struct ExamDetailSheet: View {
                     .background(tint.opacity(0.11), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 Text(title).font(.subheadline).foregroundStyle(.secondary)
                 Spacer(minLength: 10)
-                Text(value.contains(" ~ ") ? value : TijingFormat.dateTime(value))
+                Text(value.contains(" ~ ") ? value : TijingFormat.examDateTime(value))
                     .font(.subheadline.weight(.semibold))
                     .multilineTextAlignment(.trailing)
             }
@@ -390,9 +481,9 @@ private struct ExamDetailSheet: View {
     }
 
     private func dateRange(_ start: String?, _ end: String?) -> String? {
-        if let start, let end, start != end { return "\(TijingFormat.dateTime(start)) ~ \(TijingFormat.dateTime(end))" }
-        if let start { return TijingFormat.dateTime(start) }
-        if let end { return TijingFormat.dateTime(end) }
+        if let start, let end, start != end { return "\(TijingFormat.examDateTime(start)) ~ \(TijingFormat.examDateTime(end))" }
+        if let start { return TijingFormat.examDateTime(start) }
+        if let end { return TijingFormat.examDateTime(end) }
         return nil
     }
 }

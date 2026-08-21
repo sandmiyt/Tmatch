@@ -25,13 +25,45 @@ struct BattlePlayer: Codable, Identifiable, Hashable {
 
 struct BattleFeedback: Codable, Hashable {
     let questionIndex: Int
-    let picked: Int
+    let picked: [Int]
     let correct: Bool
-    let answer: Int
+    let answer: [Int]
     let explanation: String?
+
     enum CodingKeys: String, CodingKey {
-        case picked, correct, answer, explanation
+        case picked, correct, answer, answers, explanation
         case questionIndex = "question_index"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        questionIndex = try container.decode(Int.self, forKey: .questionIndex)
+        correct = try container.decode(Bool.self, forKey: .correct)
+        explanation = try container.decodeIfPresent(String.self, forKey: .explanation)
+        picked = try Self.decodeSelection(container, keys: [.picked])
+        answer = try Self.decodeSelection(container, keys: [.answers, .answer])
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(questionIndex, forKey: .questionIndex)
+        try container.encode(correct, forKey: .correct)
+        try container.encodeIfPresent(explanation, forKey: .explanation)
+        try Self.encodeSelection(picked, container: &container, key: .picked)
+        try Self.encodeSelection(answer, container: &container, key: .answer)
+    }
+
+    private static func decodeSelection(_ container: KeyedDecodingContainer<CodingKeys>, keys: [CodingKeys]) throws -> [Int] {
+        for key in keys {
+            if let values = try? container.decode([Int].self, forKey: key) { return values.sorted() }
+            if let value = try? container.decode(Int.self, forKey: key) { return [value] }
+        }
+        return []
+    }
+
+    private static func encodeSelection(_ values: [Int], container: inout KeyedEncodingContainer<CodingKeys>, key: CodingKeys) throws {
+        if values.count == 1, let value = values.first { try container.encode(value, forKey: key) }
+        else { try container.encode(values, forKey: key) }
     }
 }
 
@@ -122,7 +154,7 @@ struct JoinRoomBody: Encodable { let code: String }
 
 struct BattleAnswerBody: Encodable {
     let questionIndex: Int
-    let picked: Int
+    let picked: PickValue
     enum CodingKeys: String, CodingKey { case picked; case questionIndex = "question_index" }
 }
 

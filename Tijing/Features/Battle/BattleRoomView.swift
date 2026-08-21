@@ -67,6 +67,7 @@ struct BattleRoomView: View {
         .navigationTitle("对战")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
+        .tijingTabBarHidden()
         .navigationBarBackButtonHidden(store.state?.finished == false)
         .toolbar {
             if store.state?.finished == false {
@@ -224,7 +225,7 @@ struct BattleRoomView: View {
     }
 
     private func battleQuestion(_ question: Question, state: BattleState) -> some View {
-        let options = question.cleanedOptions
+        let options = battleOptions(for: question)
         return VStack(alignment: .leading, spacing: 16) {
             TijingPaperCard(tint: TijingDesign.sky) {
                 HStack(spacing: 12) {
@@ -255,10 +256,11 @@ struct BattleRoomView: View {
 
             ForEach(options.indices, id: \.self) { index in
                 let isExcluded = store.excluded.contains(index)
-                let isLocked = state.myFeedback != nil || store.selected != nil
+                let isSelected = question.isMultiple ? store.multipleSelection.contains(index) : store.selected == index
+                let isLocked = state.myFeedback != nil || store.isSubmittingAnswer
 
                 HStack(alignment: .top, spacing: 12) {
-                    Text(TijingFormat.optionLetter(index))
+                    Text(battleOptionLabel(question, index: index))
                         .font(.subheadline.bold())
                         .foregroundStyle(isExcluded ? .secondary : .primary)
                         .frame(width: 28, height: 28)
@@ -285,9 +287,9 @@ struct BattleRoomView: View {
                     }
                 }
                 .padding(14)
-                .background(battleOptionBackground(index, state: state), in: RoundedRectangle(cornerRadius: 19, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 19, style: .continuous).stroke(battleOptionBorder(index, state: state), lineWidth: 1))
-                .shadow(color: state.myFeedback == nil && store.selected == nil && !isExcluded ? Color.black.opacity(0.025) : Color.clear, radius: 7, y: 3)
+                .background(battleOptionBackground(index, selected: isSelected, state: state), in: RoundedRectangle(cornerRadius: 19, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 19, style: .continuous).stroke(battleOptionBorder(index, selected: isSelected, state: state), lineWidth: isSelected ? 1.5 : 1))
+                .shadow(color: state.myFeedback == nil && !store.isSubmittingAnswer && !isExcluded ? Color.black.opacity(0.025) : Color.clear, radius: 7, y: 3)
                 .contentShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
                 .scaleEffect(isExcluded ? 0.992 : 1)
                 .animation(.spring(response: 0.28, dampingFraction: 0.84), value: isExcluded)
@@ -301,12 +303,27 @@ struct BattleRoomView: View {
                 }
                 .accessibilityElement(children: .combine)
                 .accessibilityAddTraits(.isButton)
-                .accessibilityHint(state.mode == "quick" ? (isExcluded ? "长按恢复该选项" : "轻点作答，长按排除该选项") : "轻点作答")
+                .accessibilityHint(question.isMultiple ? "轻点选择或取消，选好后确认答案" : (state.mode == "quick" ? (isExcluded ? "长按恢复该选项" : "轻点作答，长按排除该选项") : "轻点作答"))
+            }
+
+            if question.isMultiple, state.myFeedback == nil {
+                Button {
+                    Task { await store.confirmMultiple() }
+                } label: {
+                    HStack(spacing: 8) {
+                        if store.isSubmittingAnswer { ProgressView().controlSize(.small).tint(.white) }
+                        Text(store.multipleSelection.isEmpty ? "请选择选项" : "确认答案（已选 \(store.multipleSelection.count) 项）")
+                        Spacer(minLength: 8)
+                        Image(systemName: "checkmark.circle.fill")
+                    }
+                }
+                .buttonStyle(TijingPrimaryButtonStyle())
+                .disabled(store.multipleSelection.isEmpty || store.isSubmittingAnswer)
             }
 
             if let feedback = state.myFeedback {
                 Label(
-                    feedback.correct ? "本题答对 +1题" : "本题未得分 · 正确答案 \(TijingFormat.optionLetter(feedback.answer))",
+                    feedback.correct ? "本题答对 +1题" : "本题未得分 · 正确答案 \(battleAnswerLabel(question, indices: feedback.answer))",
                     systemImage: feedback.correct ? "checkmark.circle.fill" : "xmark.circle.fill"
                 )
                 .font(.headline)
@@ -324,24 +341,44 @@ struct BattleRoomView: View {
         }
     }
 
-    private func battleOptionBackground(_ index: Int, state: BattleState) -> Color {
+    private func battleOptionBackground(_ index: Int, selected: Bool, state: BattleState) -> Color {
         guard let feedback = state.myFeedback else {
             if store.excluded.contains(index) { return Color.secondary.opacity(0.055) }
-            return store.selected == index ? Color.accentColor.opacity(0.10) : Color(uiColor: .secondarySystemGroupedBackground)
+            return selected ? Color.accentColor.opacity(0.10) : Color(uiColor: .secondarySystemGroupedBackground)
         }
-        if index == feedback.answer { return Color.green.opacity(0.12) }
-        if index == feedback.picked && !feedback.correct { return Color.red.opacity(0.10) }
+        if feedback.answer.contains(index) { return Color.green.opacity(0.12) }
+        if feedback.picked.contains(index) && !feedback.correct { return Color.red.opacity(0.10) }
         return Color(uiColor: .secondarySystemGroupedBackground)
     }
 
-    private func battleOptionBorder(_ index: Int, state: BattleState) -> Color {
+    private func battleOptionBorder(_ index: Int, selected: Bool, state: BattleState) -> Color {
         guard let feedback = state.myFeedback else {
             if store.excluded.contains(index) { return .secondary.opacity(0.14) }
-            return store.selected == index ? .accentColor : .secondary.opacity(0.25)
+            return selected ? .accentColor : .secondary.opacity(0.25)
         }
-        if index == feedback.answer { return .green }
-        if index == feedback.picked && !feedback.correct { return .red }
+        if feedback.answer.contains(index) { return .green }
+        if feedback.picked.contains(index) && !feedback.correct { return .red }
         return .secondary.opacity(0.2)
+    }
+
+    private func battleOptions(for question: Question) -> [String] {
+        let cleaned = question.cleanedOptions
+        if question.isJudgment, cleaned.count < 2 { return ["正确", "错误"] }
+        return cleaned
+    }
+
+    private func battleOptionLabel(_ question: Question, index: Int) -> String {
+        if question.isJudgment {
+            let options = battleOptions(for: question)
+            let option = options.indices.contains(index) ? options[index].trimmingCharacters(in: .whitespacesAndNewlines) : ""
+            if ["正确", "对", "√", "true", "yes"].contains(option.lowercased()) { return "对" }
+            if ["错误", "错", "×", "false", "no"].contains(option.lowercased()) { return "错" }
+        }
+        return TijingFormat.optionLetter(index)
+    }
+
+    private func battleAnswerLabel(_ question: Question, indices: [Int]) -> String {
+        indices.sorted().map { battleOptionLabel(question, index: $0) }.joined(separator: "、")
     }
 
     private func finishedCard(_ state: BattleState) -> some View {

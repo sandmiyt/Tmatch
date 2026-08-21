@@ -171,13 +171,18 @@ struct AuthView: View {
                             Haptics.medium()
                             Task { await submit() }
                         } label: {
-                            HStack(spacing: 8) {
-                                if busyAction == "submit" {
-                                    ProgressView().controlSize(.small).tint(.white)
+                            ZStack {
+                                HStack(spacing: 8) {
+                                    if busyAction == "submit" {
+                                        ProgressView().controlSize(.small).tint(.white)
+                                    }
+                                    Text(mode.actionTitle)
                                 }
-                                Text(mode.actionTitle)
-                                Spacer(minLength: 8)
-                                Image(systemName: "arrow.right")
+                                .frame(maxWidth: .infinity, alignment: .center)
+                                HStack {
+                                    Spacer()
+                                    Image(systemName: "arrow.right")
+                                }
                             }
                         }
                         .buttonStyle(TijingPrimaryButtonStyle())

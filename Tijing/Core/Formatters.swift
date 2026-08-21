@@ -42,6 +42,17 @@ nonisolated enum TijingFormat {
             .replacingOccurrences(of: "Z", with: "")
     }
 
+    static func examDateTime(_ value: String?) -> String {
+        guard let value else { return "" }
+        var raw = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else { return "" }
+        raw = raw.replacingOccurrences(of: "T", with: " ")
+        raw = raw.replacingOccurrences(of: #"\s*(?:Z|[+-]\d{2}:?\d{2})$"#, with: "", options: .regularExpression)
+        raw = raw.replacingOccurrences(of: #"\.\d+$"#, with: "", options: .regularExpression)
+        raw = raw.replacingOccurrences(of: #"^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}):\d{2}$"#, with: "$1 $2", options: .regularExpression)
+        return raw
+    }
+
     static func duration(milliseconds: Int) -> String {
         String(format: "%.1fs", Double(milliseconds) / 1000)
     }

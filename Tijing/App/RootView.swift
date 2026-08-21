@@ -8,6 +8,7 @@ struct RootView: View {
     @State private var showingAuth = false
     @State private var presentedBattleRoom: PresentedBattleRoom?
     @State private var showingFirstLaunchIntro = true
+    @State private var tabBarHidden = false
 
     var body: some View {
         @Bindable var bindableSession = session
@@ -61,6 +62,12 @@ struct RootView: View {
             .badge(session.unreadNotifications)
             .tag(AppTab.profile)
             }
+            .toolbar(.hidden, for: .tabBar)
+            .onPreferenceChange(TijingTabBarHiddenPreferenceKey.self) { hidden in
+                withAnimation(.spring(response: 0.40, dampingFraction: 0.88)) {
+                    tabBarHidden = hidden
+                }
+            }
             .scaleEffect(showingFirstLaunchIntro ? 1.012 : 1)
             .opacity(showingFirstLaunchIntro ? 0.94 : 1)
             .animation(.easeOut(duration: 0.34), value: showingFirstLaunchIntro)
@@ -74,6 +81,17 @@ struct RootView: View {
             }
         }
         .tint(.accentColor)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if !showingFirstLaunchIntro && !tabBarHidden {
+                TijingFloatingTabBar(selection: $selectedTab, unread: session.unreadNotifications)
+                    .padding(.horizontal, 14)
+                    .padding(.top, 6)
+                    .padding(.bottom, 4)
+                    .transition(.move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.94, anchor: .bottom)))
+            }
+        }
+        .animation(.spring(response: 0.42, dampingFraction: 0.86), value: tabBarHidden)
+        .animation(.spring(response: 0.42, dampingFraction: 0.86), value: showingFirstLaunchIntro)
         .sensoryFeedback(.selection, trigger: selectedTab)
         .onAppear { Haptics.prepare() }
         .sheet(isPresented: $showingAuth) {
@@ -244,9 +262,15 @@ private struct FirstLaunchIntroView: View {
                             .fill(TijingDesign.primaryGradient)
                             .frame(width: 78, height: 78)
 
-                        Image(systemName: "book.pages.fill")
-                            .font(.system(size: 31, weight: .semibold))
-                            .foregroundStyle(.white)
+                        Image("LaunchAppIcon")
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 70, height: 70)
+                            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    .strokeBorder(.white.opacity(0.28), lineWidth: 1)
+                            }
 
                         Image(systemName: "sparkle")
                             .font(.caption.bold())
@@ -364,8 +388,94 @@ private struct FirstLaunchIntroView: View {
     }
 }
 
-enum AppTab: Hashable {
+enum AppTab: Hashable, CaseIterable {
     case home, practice, battle, ranking, profile
+
+    var title: String {
+        switch self { case .home: "首页"; case .practice: "刷题"; case .battle: "对战"; case .ranking: "排行"; case .profile: "我的" }
+    }
+
+    var icon: String {
+        switch self { case .home: "house"; case .practice: "book.pages"; case .battle: "bolt.horizontal.circle"; case .ranking: "trophy"; case .profile: "person.crop.circle" }
+    }
+
+    var selectedIcon: String {
+        switch self { case .home: "house.fill"; case .practice: "book.pages.fill"; case .battle: "bolt.horizontal.circle.fill"; case .ranking: "trophy.fill"; case .profile: "person.crop.circle.fill" }
+    }
+}
+
+private struct TijingTabBarHiddenPreferenceKey: PreferenceKey {
+    static var defaultValue = false
+    static func reduce(value: inout Bool, nextValue: () -> Bool) {
+        value = value || nextValue()
+    }
+}
+
+extension View {
+    func tijingTabBarHidden(_ hidden: Bool = true) -> some View {
+        preference(key: TijingTabBarHiddenPreferenceKey.self, value: hidden)
+    }
+}
+
+private struct TijingFloatingTabBar: View {
+    @Binding var selection: AppTab
+    let unread: Int
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(AppTab.allCases, id: \.self) { tab in
+                Button {
+                    guard selection != tab else { return }
+                    Haptics.selection()
+                    withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) { selection = tab }
+                } label: {
+                    VStack(spacing: 4) {
+                        ZStack(alignment: .topTrailing) {
+                            Image(systemName: selection == tab ? tab.selectedIcon : tab.icon)
+                                .font(.system(size: 18, weight: selection == tab ? .semibold : .medium))
+                                .symbolRenderingMode(.hierarchical)
+                                .frame(height: 22)
+                                .contentTransition(.symbolEffect(.replace))
+                            if tab == .profile, unread > 0 {
+                                Text(unread > 99 ? "99+" : "\(unread)")
+                                    .font(.system(size: 7, weight: .bold))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 3)
+                                    .frame(minWidth: 14, minHeight: 14)
+                                    .background(.red, in: Capsule())
+                                    .offset(x: 9, y: -6)
+                            }
+                        }
+                        Text(tab.title)
+                            .font(.system(size: 10.5, weight: selection == tab ? .semibold : .medium))
+                            .lineLimit(1)
+                    }
+                    .foregroundStyle(selection == tab ? Color.accentColor : Color.secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .background {
+                        if selection == tab {
+                            Capsule()
+                                .fill(Color.accentColor.opacity(0.10))
+                                .padding(.horizontal, 3)
+                                .transition(.scale(scale: 0.82).combined(with: .opacity))
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(tab.title)
+                .accessibilityAddTraits(selection == tab ? .isSelected : [])
+            }
+        }
+        .padding(5)
+        .background(.ultraThinMaterial, in: Capsule())
+        .overlay {
+            Capsule()
+                .strokeBorder(Color.white.opacity(0.26), lineWidth: 0.8)
+        }
+        .shadow(color: Color.black.opacity(0.12), radius: 18, y: 7)
+    }
 }
 
 private struct AuthenticatedTabGate<Content: View>: View {

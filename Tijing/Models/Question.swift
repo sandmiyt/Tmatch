@@ -53,8 +53,21 @@ struct Question: Codable, Identifiable, Hashable {
         case keypoints
     }
 
-    var isMultiple: Bool { questionType == "multiple" }
-    var isJudgment: Bool { questionType == "judgment" }
+    private var normalizedQuestionType: String {
+        (questionType ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "-", with: "_")
+            .replacingOccurrences(of: " ", with: "_")
+    }
+
+    var isMultiple: Bool {
+        ["multiple", "multi", "multiple_choice", "multiplechoice", "multiple_select", "multiselect", "多选", "多选题"].contains(normalizedQuestionType) || (answers?.count ?? 0) > 1
+    }
+
+    var isJudgment: Bool {
+        ["judgment", "judgement", "judge", "true_false", "truefalse", "boolean", "bool", "判断", "判断题"].contains(normalizedQuestionType)
+    }
 
     func preparedForDisplay() -> Question {
         let cleaned = Self.cleanOptionLabels(options)

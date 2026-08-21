@@ -4,14 +4,10 @@ import UIKit
 
 struct ProfileView: View {
     @Environment(SessionStore.self) private var session
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Binding var showingAuth: Bool
     private var stats: StatsResponse? { session.homeStats }
     @State private var confirmLogout = false
 
-    private var statColumns: [GridItem] {
-        dynamicTypeSize.isAccessibilitySize ? [GridItem(.flexible())] : [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
-    }
 
     var body: some View {
         ZStack {
@@ -23,16 +19,14 @@ struct ProfileView: View {
                             .tijingReveal(order: 0)
                         identityCard(user)
                             .tijingReveal(order: 1)
-                        statusStamps(user)
-                            .tijingReveal(order: 2)
                         activitySection
-                            .tijingReveal(order: 3)
+                            .tijingReveal(order: 2)
                         accountSection
-                            .tijingReveal(order: 4)
+                            .tijingReveal(order: 3)
                         supportSection
-                            .tijingReveal(order: 5)
+                            .tijingReveal(order: 4)
                         logoutButton
-                            .tijingReveal(order: 6)
+                            .tijingReveal(order: 5)
                     }
                     .padding(.horizontal, TijingDesign.pageHorizontalPadding)
                     .padding(.top, 8)
@@ -157,35 +151,6 @@ struct ProfileView: View {
         .frame(maxWidth: .infinity)
     }
 
-    private func statusStamps(_ user: User) -> some View {
-        VStack(spacing: 12) {
-            TijingSectionHeading("最近的你", subtitle: "三枚小状态章，快速看一眼就够了")
-            LazyVGrid(columns: statColumns, spacing: 10) {
-                stamp(value: "\(stats?.questions ?? user.questions ?? 0)", label: "已刷题量", icon: "book.closed.fill", tint: TijingDesign.sky)
-                stamp(value: TijingFormat.percent(stats?.accuracy ?? user.accuracy), label: "正确率", icon: "checkmark.seal.fill", tint: TijingDesign.sage)
-                stamp(value: "\(stats?.wins ?? user.wins)胜 \(stats?.losses ?? user.losses)负", label: "排位战绩", icon: "medal.fill", tint: TijingDesign.butter)
-            }
-        }
-    }
-
-    private func stamp(value: String, label: String, icon: String, tint: Color) -> some View {
-        TijingPaperCard(tint: tint) {
-            VStack(alignment: .leading, spacing: 10) {
-                TijingStickerIcon(systemImage: icon, tint: TijingDesign.ink.opacity(0.70), background: tint, size: 38, rotation: -5, sparkle: false)
-                Text(value)
-                    .font(.system(.title3, design: .rounded, weight: .bold))
-                    .monospacedDigit()
-                    .contentTransition(.numericText())
-                    .animation(.snappy(duration: 0.36), value: value)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                Text(label)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, minHeight: 94, alignment: .leading)
-        }
-    }
 
     private var activitySection: some View {
         VStack(spacing: 12) {

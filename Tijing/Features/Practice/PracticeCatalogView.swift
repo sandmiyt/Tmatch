@@ -36,6 +36,7 @@ struct DirectPracticeLauncherView: View {
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
+        .tijingTabBarHidden()
         .task { await prepare() }
     }
 

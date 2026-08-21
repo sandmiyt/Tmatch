@@ -42,6 +42,7 @@ struct DailyChallengeView: View {
         .navigationTitle(detail?.isFriend == true ? "好友挑战" : "今日挑战")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
+        .tijingTabBarHidden()
         .task(id: challengeID) { await load() }
         .sheet(isPresented: $showingAnswerSheet) {
             if let detail { answerSheet(detail) }

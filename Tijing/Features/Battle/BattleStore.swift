@@ -11,6 +11,8 @@ final class BattleRoomStore {
     var networkHint: String?
     var isConnecting = false
     var selected: Int?
+    var multipleSelection: Set<Int> = []
+    var isSubmittingAnswer = false
     var excluded: Set<Int> = []
 
     private let api: APIClient
@@ -63,23 +65,42 @@ final class BattleRoomStore {
     }
 
     func toggleExcluded(_ index: Int) {
-        guard let state, state.mode == "quick", !state.finished, state.myFeedback == nil, selected == nil else { return }
-        if excluded.contains(index) {
-            excluded.remove(index)
-        } else {
+        guard let state, state.mode == "quick", !state.finished, state.myFeedback == nil, !isSubmittingAnswer else { return }
+        if excluded.contains(index) { excluded.remove(index) }
+        else {
             excluded.insert(index)
+            multipleSelection.remove(index)
         }
         Haptics.light()
     }
 
     func answer(_ index: Int) async {
-        guard let state, !state.finished, state.myFeedback == nil, selected == nil, !excluded.contains(index) else { return }
-        selected = index
+        guard let state, let question = state.question, !state.finished, state.myFeedback == nil, !isSubmittingAnswer, !excluded.contains(index) else { return }
+        if question.isMultiple {
+            if multipleSelection.contains(index) { multipleSelection.remove(index) }
+            else { multipleSelection.insert(index) }
+            Haptics.selection()
+            return
+        }
+        await submit(indices: [index])
+    }
+
+    func confirmMultiple() async {
+        guard let state, state.question?.isMultiple == true, !multipleSelection.isEmpty, state.myFeedback == nil, !isSubmittingAnswer else { return }
+        await submit(indices: multipleSelection.sorted())
+    }
+
+    private func submit(indices: [Int]) async {
+        guard let state, !indices.isEmpty else { return }
+        isSubmittingAnswer = true
+        selected = indices.count == 1 ? indices[0] : nil
         error = nil
         networkHint = nil
         Haptics.selection()
-        let body = BattleAnswerBody(questionIndex: state.questionIndex, picked: index)
+        let picked: PickValue = indices.count == 1 ? .one(indices[0]) : .many(indices)
+        let body = BattleAnswerBody(questionIndex: state.questionIndex, picked: picked)
         var lastError: Error?
+        defer { isSubmittingAnswer = false }
         for attempt in 0..<2 {
             do {
                 let updated: BattleState = try await api.request("/api/battles/\(roomID)/answer", method: .post, body: body, token: token)
@@ -218,7 +239,12 @@ final class BattleRoomStore {
         error = nil
         if oldQuestion != newState.questionIndex {
             selected = nil
+            multipleSelection.removeAll()
             excluded.removeAll()
+        }
+        if newState.myFeedback != nil {
+            selected = nil
+            multipleSelection.removeAll()
         }
         if oldFeedback == nil, let feedback = newState.myFeedback {
             feedback.correct ? Haptics.success() : Haptics.error()

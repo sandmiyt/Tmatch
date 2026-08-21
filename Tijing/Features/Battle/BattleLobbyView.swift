@@ -14,6 +14,7 @@ struct BattleLobbyView: View {
     @State private var topic = ""
     @State private var catalogLoading = true
     @State private var lastMatchStage = "exact"
+    @State private var matchWaitSeconds = 0
 
     private var selectedSubject: PracticeSubject? { catalog.first { $0.name == subject } }
     private var scopeLabel: String { topic.isEmpty ? (subject.isEmpty ? "全部题库" : subject) : "\(subject) · \(topic)" }
@@ -22,42 +23,56 @@ struct BattleLobbyView: View {
         ZStack {
             TijingPageBackground()
 
-            ScrollView {
-                LazyVStack(spacing: TijingDesign.sectionSpacing) {
-                    VStack(alignment: .leading, spacing: 7) {
-                        Text("对战")
-                            .font(.system(.largeTitle, design: .rounded, weight: .heavy))
-                        Text("十道题，拼正确率，也拼节奏。")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .tijingReveal(order: 0)
+            if matching {
+                TijingMatchmakingScreen(
+                    scope: scopeLabel,
+                    status: matchStatus,
+                    waitSeconds: matchWaitSeconds,
+                    stage: lastMatchStage,
+                    cancel: cancelMatch
+                )
+                .transition(.move(edge: .trailing).combined(with: .opacity))
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: TijingDesign.sectionSpacing) {
+                        VStack(alignment: .leading, spacing: 7) {
+                            Text("对战")
+                                .font(.system(.largeTitle, design: .rounded, weight: .heavy))
+                            Text("十道题，拼正确率，也拼节奏。")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .tijingReveal(order: 0)
 
-                    rankedHero
-                        .tijingReveal(order: 1)
-                    scopeCard
-                        .tijingReveal(order: 2)
-                    secondaryModes
-                        .tijingReveal(order: 3)
-                    joinRoomCard
-                        .tijingReveal(order: 4)
+                        rankedHero
+                            .tijingReveal(order: 1)
+                        scopeCard
+                            .tijingReveal(order: 2)
+                        secondaryModes
+                            .tijingReveal(order: 3)
+                        joinRoomCard
+                            .tijingReveal(order: 4)
 
-                    if let error {
-                        Label(error, systemImage: "exclamationmark.triangle.fill")
-                            .font(.footnote)
-                            .foregroundStyle(.red)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(14)
-                            .tijingCard()
+                        if let error {
+                            Label(error, systemImage: "exclamationmark.triangle.fill")
+                                .font(.footnote)
+                                .foregroundStyle(.red)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(14)
+                                .tijingCard()
+                        }
                     }
+                    .padding(.horizontal, TijingDesign.pageHorizontalPadding)
+                    .padding(.top, 10)
+                    .padding(.bottom, 28)
                 }
-                .padding(.horizontal, TijingDesign.pageHorizontalPadding)
-                .padding(.top, 10)
-                .padding(.bottom, 28)
+                .transition(.move(edge: .leading).combined(with: .opacity))
             }
         }
         .navigationTitle("")
+        .animation(.spring(response: 0.48, dampingFraction: 0.88), value: matching)
+        .tijingTabBarHidden(matching)
         .navigationBarTitleDisplayMode(.inline)
         .sensoryFeedback(.selection, trigger: subject)
         .sensoryFeedback(.selection, trigger: topic)
@@ -349,6 +364,7 @@ struct BattleLobbyView: View {
         matching = true
         error = nil
         lastMatchStage = "exact"
+        matchWaitSeconds = 0
         matchStatus = "正在寻找 \(scopeLabel) · 排位赛对手…" + (topic.isEmpty ? "" : "\n（60秒未匹配将自动扩大到本题库全部章节）")
         matchTask = Task { await matchLoop() }
     }
@@ -357,6 +373,7 @@ struct BattleLobbyView: View {
         matching = false
         matchTask?.cancel(); matchTask = nil
         matchStatus = ""
+        matchWaitSeconds = 0
         lastMatchStage = "exact"
         guard let token = session.token else { return }
         Task { let _: EmptyResponse? = try? await session.api.request("/api/matchmaking/cancel", method: .post, body: EmptyBody(), token: token) }
@@ -384,6 +401,7 @@ struct BattleLobbyView: View {
                     return
                 }
                 let waited = response.waitSeconds ?? 0
+                matchWaitSeconds = waited
                 let nextStage = response.matchStage ?? "exact"
                 if nextStage != lastMatchStage {
                     lastMatchStage = nextStage
@@ -471,5 +489,113 @@ struct BattleLobbyView: View {
            response.state?.finished != true {
             roomID = id
         }
+    }
+}
+
+
+private struct TijingMatchmakingScreen: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let scope: String
+    let status: String
+    let waitSeconds: Int
+    let stage: String
+    let cancel: () -> Void
+
+    @State private var pulse = false
+    @State private var orbit = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 36)
+
+            ZStack {
+                Circle()
+                    .stroke(Color.accentColor.opacity(0.10), lineWidth: 18)
+                    .frame(width: 214, height: 214)
+                    .scaleEffect(pulse ? 1.08 : 0.94)
+                    .opacity(pulse ? 0.28 : 0.72)
+
+                Circle()
+                    .strokeBorder(
+                        AngularGradient(colors: [Color.accentColor.opacity(0.12), Color.accentColor, TijingDesign.cyan, Color.accentColor.opacity(0.12)], center: .center),
+                        style: StrokeStyle(lineWidth: 5, lineCap: .round, dash: [12, 9])
+                    )
+                    .frame(width: 172, height: 172)
+                    .rotationEffect(.degrees(orbit ? 360 : 0))
+
+                ZStack {
+                    Circle()
+                        .fill(.ultraThinMaterial)
+                        .frame(width: 126, height: 126)
+                        .shadow(color: Color.black.opacity(0.08), radius: 18, y: 8)
+                    Image(systemName: "person.2.fill")
+                        .font(.system(size: 40, weight: .semibold))
+                        .foregroundStyle(Color.accentColor)
+                        .symbolEffect(.pulse, options: .repeating, isActive: !reduceMotion)
+                }
+            }
+            .frame(height: 236)
+
+            VStack(spacing: 9) {
+                Text("正在为你寻找对手")
+                    .font(.system(.title2, design: .rounded, weight: .bold))
+                Text(scope)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Text(status.isEmpty ? "保持当前页面，匹配成功后会自动进入对战" : status)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 26)
+                    .contentTransition(.opacity)
+            }
+
+            HStack(spacing: 10) {
+                matchChip("\(waitSeconds)s", icon: "timer")
+                matchChip(stageTitle, icon: stage == "exact" ? "scope" : "arrow.up.right.circle.fill")
+            }
+            .padding(.top, 18)
+
+            Spacer()
+
+            Button(role: .destructive) {
+                Haptics.selection()
+                cancel()
+            } label: {
+                Label("取消匹配", systemImage: "xmark")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            .padding(.horizontal, 28)
+            .padding(.bottom, 22)
+        }
+        .padding(.top, 8)
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.easeInOut(duration: 1.7).repeatForever(autoreverses: true)) { pulse = true }
+            withAnimation(.linear(duration: 6.2).repeatForever(autoreverses: false)) { orbit = true }
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private var stageTitle: String {
+        switch stage {
+        case "all": "全部题库"
+        case "subject": "已扩大章节"
+        default: "精准匹配"
+        }
+    }
+
+    private func matchChip(_ text: String, icon: String) -> some View {
+        Label(text, systemImage: icon)
+            .font(.caption.weight(.semibold))
+            .monospacedDigit()
+            .padding(.horizontal, 11)
+            .padding(.vertical, 7)
+            .background(.thinMaterial, in: Capsule())
     }
 }

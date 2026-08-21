@@ -29,6 +29,7 @@ struct PracticeSessionView: View {
         .navigationTitle(store.mode.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
+        .tijingTabBarHidden()
         .navigationBarBackButtonHidden(!store.questions.isEmpty && store.batchResult == nil)
         .toolbar {
             if !store.questions.isEmpty {
