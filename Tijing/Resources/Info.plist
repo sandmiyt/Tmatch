@@ -21,7 +21,7 @@
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>API_BASE_URL</key>
-	<string>https://xiaocai.nat100.top//</string>
+	<string>https://xiaocai.nat100.top/</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UILaunchScreen</key>
