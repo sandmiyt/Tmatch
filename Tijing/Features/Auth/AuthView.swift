@@ -172,16 +172,13 @@ struct AuthView: View {
                             Task { await submit() }
                         } label: {
                             ZStack {
-                                HStack(spacing: 8) {
-                                    if busyAction == "submit" {
+                                Text(mode.actionTitle)
+                                    .frame(maxWidth: .infinity, alignment: .center)
+                                if busyAction == "submit" {
+                                    HStack {
                                         ProgressView().controlSize(.small).tint(.white)
+                                        Spacer()
                                     }
-                                    Text(mode.actionTitle)
-                                }
-                                .frame(maxWidth: .infinity, alignment: .center)
-                                HStack {
-                                    Spacer()
-                                    Image(systemName: "arrow.right")
                                 }
                             }
                         }

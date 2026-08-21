@@ -312,11 +312,15 @@ struct BattleRoomView: View {
                 Button {
                     Task { await store.confirmMultiple() }
                 } label: {
-                    HStack(spacing: 8) {
-                        if store.isSubmittingAnswer { ProgressView().controlSize(.small).tint(.white) }
+                    ZStack {
                         Text(store.multipleSelection.isEmpty ? "请选择选项" : "确认答案（已选 \(store.multipleSelection.count) 项）")
-                        Spacer(minLength: 8)
-                        Image(systemName: "checkmark.circle.fill")
+                            .frame(maxWidth: .infinity, alignment: .center)
+                        if store.isSubmittingAnswer {
+                            HStack {
+                                ProgressView().controlSize(.small).tint(.white)
+                                Spacer()
+                            }
+                        }
                     }
                 }
                 .buttonStyle(TijingPrimaryButtonStyle())
