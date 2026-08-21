@@ -11,183 +11,304 @@ struct HomeView: View {
     @State private var calendarSummary: ExamCalendarSummary?
     @State private var loadError: String?
 
+    private var gridColumns: [GridItem] {
+        if dynamicTypeSize.isAccessibilitySize { return [GridItem(.flexible())] }
+        return [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
+    }
+
     var body: some View {
-        List {
-            Section {
-                header
-                    .listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 12, trailing: 20))
-                    .listRowBackground(Color.clear)
-            }
+        ZStack {
+            TijingPageBackground()
 
-            if session.isAuthenticated {
-                Section("继续") {
-                    NavigationLink {
-                        PracticeCatalogView(initialMode: .random)
-                    } label: {
-                        HomeFeatureRow(
-                            title: "继续刷题",
-                            subtitle: "按当前题量、难度与答题方式开始一组",
-                            systemImage: "play.circle.fill"
-                        )
+            ScrollView {
+                LazyVStack(spacing: TijingDesign.sectionSpacing) {
+                    pageHeader
+
+                    if session.isAuthenticated {
+                        continueHero
+                        todaySection
+                        pulseSection
+                        utilitySection
+                    } else {
+                        signInHero
                     }
 
-                    NavigationLink {
-                        DailyChallengeView()
-                    } label: {
-                        HomeFeatureRow(
-                            title: "今日挑战 · 10题",
-                            subtitle: challengeSubtitle,
-                            systemImage: "flame.fill"
-                        )
-                    }
-
-                    NavigationLink {
-                        LearningView()
-                    } label: {
-                        HomeFeatureRow(
-                            title: "今日上岸 · 智能训练",
-                            subtitle: dailyPlanSubtitle,
-                            systemImage: "target"
-                        )
-                    }
-                }
-
-                Section("学习概览") {
-                    LabeledContent {
-                        Text(TijingFormat.percent(stats?.accuracy7d))
-                            .fontWeight(.semibold)
-                            .monospacedDigit()
-                    } label: {
-                        Label("近 7 天正确率", systemImage: "scope")
-                    }
-
-                    LabeledContent {
-                        Text("\(stats?.questions ?? 0)")
-                            .fontWeight(.semibold)
-                            .monospacedDigit()
-                    } label: {
-                        Label("已刷题量", systemImage: "checkmark.circle")
-                    }
-
-                    NavigationLink {
-                        PracticeCatalogView(initialMode: .wrong)
-                    } label: {
-                        HomeValueRow(
-                            title: "错题待复习",
-                            value: "\(stats?.wrong ?? 0)",
-                            systemImage: "arrow.counterclockwise.circle"
-                        )
-                    }
-
-                    NavigationLink {
-                        PracticeCatalogView(initialMode: .favorite)
-                    } label: {
-                        HomeValueRow(
-                            title: "收藏题目",
-                            value: "\(stats?.favorites ?? 0)",
-                            systemImage: "star"
-                        )
-                    }
-                }
-
-                Section("快捷入口") {
-                    NavigationLink {
-                        FriendsView()
-                    } label: {
-                        HomeFeatureRow(
-                            title: "好友",
-                            subtitle: "查看在线状态、邀请对战与好友挑战",
-                            systemImage: "person.2"
-                        )
-                    }
-
-                    NavigationLink {
-                        ExamCalendarView()
-                    } label: {
-                        HomeFeatureRow(
-                            title: "四川事业编考试日历",
-                            subtitle: calendarSubtitle,
-                            systemImage: "calendar"
-                        )
-                    }
-                }
-            } else {
-                Section {
-                    VStack(alignment: .leading, spacing: 14) {
-                        Label("登录后开始刷题", systemImage: "person.crop.circle.badge.checkmark")
-                            .font(.headline)
-                        Text("直接使用你现有的题竞账号，刷题、错题、收藏、好友和对战数据都会同步。")
-                            .font(.subheadline)
+                    if let loadError {
+                        Label(loadError, systemImage: "wifi.exclamationmark")
+                            .font(.footnote)
                             .foregroundStyle(.secondary)
-
-                        Button("登录 / 注册") {
-                            Haptics.selection()
-                            showingAuth = true
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(14)
+                            .tijingCard()
                     }
-                    .padding(.vertical, 8)
                 }
+                .padding(.horizontal, TijingDesign.pageHorizontalPadding)
+                .padding(.top, 10)
+                .padding(.bottom, 28)
             }
-
-            if let loadError {
-                Section {
-                    Label(loadError, systemImage: "wifi.exclamationmark")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-            }
+            .refreshable { await load() }
         }
-        .listStyle(.insetGrouped)
-        .navigationTitle("首页")
-        .navigationBarTitleDisplayMode(.large)
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 if session.isAuthenticated {
                     NavigationLink {
                         NotificationsView()
                     } label: {
-                        ZStack(alignment: .topTrailing) {
-                            Image(systemName: "bell")
-                            if session.unreadNotifications > 0 {
-                                Text(session.unreadNotifications > 99 ? "99+" : "\(session.unreadNotifications)")
-                                    .font(.system(size: 8, weight: .bold))
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 4)
-                                    .frame(minWidth: 16, minHeight: 16)
-                                    .background(.red, in: Capsule())
-                                    .offset(x: 9, y: -8)
-                            }
-                        }
+                        notificationButton
                     }
-                    .accessibilityLabel(session.unreadNotifications > 0 ? "通知，\(session.unreadNotifications) 条未读" : "通知")
+                    .tijingTactileLink()
                 } else {
                     Button("登录") {
                         Haptics.selection()
                         showingAuth = true
                     }
+                    .fontWeight(.semibold)
                 }
             }
         }
-        .refreshable { await load() }
         .task(id: session.user?.id) { await load() }
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 8) {
+    private var pageHeader: some View {
+        VStack(alignment: .leading, spacing: 7) {
             Text(session.user.map { greeting(for: $0.nickname) } ?? "你好")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
             Text("上岸之前，先上分。")
-                .font(.system(.largeTitle, design: .rounded, weight: .bold))
+                .font(.system(.largeTitle, design: .rounded, weight: .heavy))
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
-                .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.72)
-            Text(session.isAuthenticated ? homeSummary : "把练习、复习、对战和考试节点放进一个真正顺手的 iPhone 客户端。")
+                .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.74)
+            Text(session.isAuthenticated ? homeSummary : "把每一次练习都变成看得见的进步。")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var continueHero: some View {
+        NavigationLink {
+            PracticeCatalogView(initialMode: .random)
+        } label: {
+            TijingHeroCard {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 18) {
+                        heroCopy
+                        Spacer(minLength: 8)
+                        TijingProgressRing(
+                            progress: Double(stats?.accuracy7d ?? 0) / 100,
+                            value: TijingFormat.percent(stats?.accuracy7d),
+                            caption: "近 7 天"
+                        )
+                    }
+                    VStack(alignment: .leading, spacing: 18) {
+                        heroCopy
+                        TijingProgressRing(
+                            progress: Double(stats?.accuracy7d ?? 0) / 100,
+                            value: TijingFormat.percent(stats?.accuracy7d),
+                            caption: "近 7 天"
+                        )
+                    }
+                }
+                .foregroundStyle(.white)
+            }
+        }
+        .buttonStyle(TijingPressableCardStyle())
+        .tijingTactileLink()
+    }
+
+    private var heroCopy: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("继续刷题", systemImage: "play.fill")
+                .font(.headline)
+                .foregroundStyle(.white.opacity(0.86))
+
+            Text(dailyPlan?.analysis.summary.focus?.topic ?? dailyPlan?.analysis.summary.focus?.subject ?? "今天继续稳住手感")
+                .font(.system(.title2, design: .rounded, weight: .bold))
+                .lineLimit(2)
+
+            Text(dailyPlanSubtitle)
+                .font(.subheadline)
+                .foregroundStyle(.white.opacity(0.78))
+                .lineLimit(2)
+
+            HStack(spacing: 7) {
+                Text("开始下一组")
+                    .font(.subheadline.bold())
+                Image(systemName: "arrow.right")
+                    .font(.caption.bold())
+            }
+            .padding(.horizontal, 13)
+            .padding(.vertical, 9)
+            .background(.white.opacity(0.16), in: Capsule())
+        }
+    }
+
+    private var todaySection: some View {
+        VStack(spacing: 12) {
+            TijingSectionHeading("今天", subtitle: "任务不需要多，先把最值钱的三件事做完")
+
+            LazyVGrid(columns: gridColumns, spacing: 12) {
+                NavigationLink {
+                    DailyChallengeView()
+                } label: {
+                    TijingActionTile(
+                        title: "今日挑战",
+                        subtitle: challengeSubtitle,
+                        systemImage: "flame.fill",
+                        tint: TijingDesign.coral,
+                        emphasis: true
+                    )
+                }
+                .buttonStyle(TijingPressableCardStyle())
+                .tijingTactileLink()
+
+                NavigationLink {
+                    LearningView()
+                } label: {
+                    TijingActionTile(
+                        title: "智能训练",
+                        subtitle: dailyPlanSubtitle,
+                        systemImage: "scope",
+                        tint: TijingDesign.violet
+                    )
+                }
+                .buttonStyle(TijingPressableCardStyle())
+                .tijingTactileLink()
+            }
+
+            NavigationLink {
+                ExamCalendarView()
+            } label: {
+                TijingSettingsGroup {
+                    TijingSettingsRow(
+                        "考试日历",
+                        subtitle: calendarSubtitle,
+                        systemImage: "calendar.badge.clock",
+                        tint: TijingDesign.amber
+                    )
+                }
+            }
+            .buttonStyle(TijingPressableCardStyle())
+            .tijingTactileLink()
+        }
+    }
+
+    private var pulseSection: some View {
+        VStack(spacing: 12) {
+            TijingSectionHeading("学习脉搏", subtitle: "一眼看清最近的状态，不用翻报表")
+
+            LazyVGrid(columns: gridColumns, spacing: 12) {
+                TijingMetricTile(
+                    value: TijingFormat.percent(stats?.accuracy7d),
+                    title: "7 天正确率",
+                    systemImage: "scope",
+                    tint: TijingDesign.mint
+                )
+
+                TijingMetricTile(
+                    value: "\(stats?.questions ?? 0)",
+                    title: "累计刷题",
+                    systemImage: "checkmark.circle.fill",
+                    tint: .accentColor
+                )
+
+                NavigationLink {
+                    PracticeCatalogView(initialMode: .wrong)
+                } label: {
+                    TijingMetricTile(
+                        value: "\(stats?.wrong ?? 0)",
+                        title: "错题待复习",
+                        systemImage: "arrow.counterclockwise.circle.fill",
+                        tint: TijingDesign.coral
+                    )
+                }
+                .buttonStyle(TijingPressableCardStyle())
+                .tijingTactileLink()
+
+                NavigationLink {
+                    PracticeCatalogView(initialMode: .favorite)
+                } label: {
+                    TijingMetricTile(
+                        value: "\(stats?.favorites ?? 0)",
+                        title: "已收藏",
+                        systemImage: "star.fill",
+                        tint: TijingDesign.amber
+                    )
+                }
+                .buttonStyle(TijingPressableCardStyle())
+                .tijingTactileLink()
+            }
+        }
+    }
+
+    private var utilitySection: some View {
+        VStack(spacing: 12) {
+            TijingSectionHeading("一起上分")
+            NavigationLink {
+                FriendsView()
+            } label: {
+                TijingSettingsGroup {
+                    TijingSettingsRow(
+                        "好友与挑战",
+                        subtitle: "看看谁在线，直接约一局或发起 48 小时挑战",
+                        systemImage: "person.2.fill",
+                        tint: TijingDesign.cyan
+                    )
+                }
+            }
+            .buttonStyle(TijingPressableCardStyle())
+            .tijingTactileLink()
+        }
+    }
+
+    private var signInHero: some View {
+        TijingHeroCard {
+            VStack(alignment: .leading, spacing: 14) {
+                Image(systemName: "person.crop.circle.badge.checkmark")
+                    .font(.system(size: 36, weight: .semibold))
+                Text("登录后，进度才真正属于你")
+                    .font(.title2.bold())
+                Text("刷题、错题、收藏、好友与对战记录都会和现有题竞账号同步。")
+                    .font(.subheadline)
+                    .foregroundStyle(.white.opacity(0.78))
+
+                Button {
+                    Haptics.medium()
+                    showingAuth = true
+                } label: {
+                    Label("登录 / 注册", systemImage: "arrow.right.circle.fill")
+                        .font(.headline)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(.white, in: Capsule())
+                        .foregroundStyle(.black)
+                }
+                .buttonStyle(TijingPressableCardStyle())
+            }
+            .foregroundStyle(.white)
+        }
+    }
+
+    private var notificationButton: some View {
+        ZStack(alignment: .topTrailing) {
+            Image(systemName: "bell.fill")
+                .font(.body.weight(.semibold))
+                .frame(width: 34, height: 34)
+                .background(.regularMaterial, in: Circle())
+            if session.unreadNotifications > 0 {
+                Text(session.unreadNotifications > 99 ? "99+" : "\(session.unreadNotifications)")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 4)
+                    .frame(minWidth: 16, minHeight: 16)
+                    .background(.red, in: Capsule())
+                    .offset(x: 5, y: -4)
+            }
+        }
+        .accessibilityLabel(session.unreadNotifications > 0 ? "通知，\(session.unreadNotifications) 条未读" : "通知")
     }
 
     private var homeSummary: String {
@@ -274,48 +395,6 @@ struct HomeView: View {
             loadError = nil
         } catch {
             loadError = error.localizedDescription
-        }
-    }
-}
-
-private struct HomeFeatureRow: View {
-    let title: String
-    let subtitle: String
-    let systemImage: String
-
-    var body: some View {
-        Label {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.body.weight(.medium))
-                    .foregroundStyle(.primary)
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
-        } icon: {
-            Image(systemName: systemImage)
-                .foregroundStyle(.tint)
-                .frame(width: 26)
-        }
-        .padding(.vertical, 3)
-    }
-}
-
-private struct HomeValueRow: View {
-    let title: String
-    let value: String
-    let systemImage: String
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Label(title, systemImage: systemImage)
-            Spacer()
-            Text(value)
-                .fontWeight(.semibold)
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
         }
     }
 }

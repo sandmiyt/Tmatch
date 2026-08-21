@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RankingView: View {
     @Environment(SessionStore.self) private var session
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var items: [User] = []
     @State private var seasonInfo: SeasonPublicInfo?
     @State private var seasonMe: SeasonMeResponse?
@@ -10,45 +11,55 @@ struct RankingView: View {
     @State private var seasonPanel: SeasonPanel?
 
     var body: some View {
-        Group {
+        ZStack {
+            TijingPageBackground()
+
             if loading && items.isEmpty {
                 ProgressView("正在加载排行榜")
             } else if items.isEmpty {
                 ContentUnavailableView("暂无排行数据", systemImage: "trophy", description: Text(error ?? "稍后再试"))
             } else {
-                List {
-                    if let season = seasonInfo ?? seasonMe?.season {
-                        Section {
-                            seasonBanner(season)
-                                .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
-                            if let current = seasonMe?.current {
-                                mySeasonCard(current)
-                                    .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 10, trailing: 16))
-                            } else if session.token != nil {
-                                HStack { ProgressView(); Text("正在同步我的赛季…").foregroundStyle(.secondary) }
-                            }
+                ScrollView {
+                    LazyVStack(spacing: TijingDesign.sectionSpacing) {
+                        VStack(alignment: .leading, spacing: 7) {
+                            Text("排行榜")
+                                .font(.system(.largeTitle, design: .rounded, weight: .heavy))
+                            Text("这一季，看看谁真的把正确率打成了段位。")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
                         }
-                    }
+                        .frame(maxWidth: .infinity, alignment: .leading)
 
-                    Section("本赛季排行") {
-                        ForEach(items) { user in
-                            if session.token != nil {
-                                NavigationLink {
-                                    PublicProfileView(userID: user.id)
-                                } label: {
-                                    rankingRow(user)
-                                }
-                            } else {
-                                rankingRow(user)
-                            }
+                        if let season = seasonInfo ?? seasonMe?.season {
+                            seasonHero(season)
+                        }
+
+                        if !items.isEmpty {
+                            podiumSection
+                        }
+
+                        if let current = seasonMe?.current {
+                            mySeasonSection(current)
+                        }
+
+                        rankingListSection
+
+                        if let error {
+                            Label(error, systemImage: "wifi.exclamationmark")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
+                    .padding(.horizontal, TijingDesign.pageHorizontalPadding)
+                    .padding(.top, 10)
+                    .padding(.bottom, 30)
                 }
-                .listStyle(.insetGrouped)
                 .refreshable { await load() }
             }
         }
-        .navigationTitle("排行榜")
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
         .onChange(of: session.rankingRevision) { _, _ in
             Task { await load() }
@@ -63,96 +74,185 @@ struct RankingView: View {
         }
     }
 
-    private func seasonBanner(_ season: SeasonPublicInfo) -> some View {
-        HStack(spacing: 14) {
-            Image(systemName: "crown.fill")
-                .font(.title2)
-                .foregroundStyle(.tint)
-                .frame(width: 42, height: 42)
-                .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-            VStack(alignment: .leading, spacing: 4) {
-                Text(season.label).font(.headline)
-                Text(season.daysLeft > 0 ? "距赛季结算还有 \(season.daysLeft) 天" : "新赛季即将开启")
-                    .font(.subheadline.bold())
-                Text("每月 1 日 00:00 结算，上赛季竞点不原样带入，新赛季按最终段位继承。")
+    private func seasonHero(_ season: SeasonPublicInfo) -> some View {
+        TijingHeroCard(
+            gradient: LinearGradient(
+                colors: [Color(red: 0.13, green: 0.15, blue: 0.30), TijingDesign.indigo, TijingDesign.violet],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        ) {
+            HStack(alignment: .top, spacing: 16) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label(season.label, systemImage: "crown.fill")
+                        .font(.headline)
+                        .foregroundStyle(.white.opacity(0.82))
+                    Text(season.daysLeft > 0 ? "\(season.daysLeft) 天后结算" : "新赛季即将开启")
+                        .font(.system(.title, design: .rounded, weight: .bold))
+                    Text("每月 1 日结算，新的赛季从上一季最终段位继续出发。")
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.72))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "trophy.fill")
+                    .font(.system(size: 38, weight: .semibold))
+                    .foregroundStyle(TijingDesign.amber)
+                    .symbolRenderingMode(.hierarchical)
+            }
+            .foregroundStyle(.white)
+        }
+    }
+
+    private var podiumSection: some View {
+        VStack(spacing: 14) {
+            TijingSectionHeading("赛季前三", subtitle: "前三名拥有更强的荣誉层级，其余名次回归干净的信息列表")
+
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(spacing: 10) {
+                    if let first = items.first { podiumLink(first, place: 1) }
+                    if items.count > 1 { podiumLink(items[1], place: 2) }
+                    if items.count > 2 { podiumLink(items[2], place: 3) }
+                }
+            } else {
+                HStack(alignment: .bottom, spacing: 10) {
+                    if items.count > 1 { podiumLink(items[1], place: 2) }
+                    if let first = items.first { podiumLink(first, place: 1) }
+                    if items.count > 2 { podiumLink(items[2], place: 3) }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func podiumLink(_ user: User, place: Int) -> some View {
+        if session.token != nil {
+            NavigationLink {
+                PublicProfileView(userID: user.id)
+            } label: {
+                SeasonPodiumCard(user: user, place: place)
+            }
+            .buttonStyle(TijingPressableCardStyle())
+            .tijingTactileLink()
+        } else {
+            SeasonPodiumCard(user: user, place: place)
+        }
+    }
+
+    private func mySeasonSection(_ current: CurrentSeasonProgress) -> some View {
+        VStack(spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                TijingSectionHeading("我的赛季", subtitle: "#\(current.position) · \(current.title)")
+                Spacer()
+                Text("\(current.rating)")
+                    .font(.system(.title2, design: .rounded, weight: .bold))
+                    .monospacedDigit()
+                Text("竞点")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-        }
-        .padding(.vertical, 4)
-    }
 
-    private func mySeasonCard(_ current: CurrentSeasonProgress) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("我的赛季").font(.caption).foregroundStyle(.secondary)
-                    Text("#\(current.position) · \(current.title)").font(.title3.bold()).monospacedDigit()
-                    Text("\(current.rank) · \(current.rating) 竞点").font(.subheadline).foregroundStyle(.secondary)
+            LazyVGrid(columns: dynamicTypeSize.isAccessibilitySize ? [GridItem(.flexible())] : [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                TijingMetricTile(value: "\(current.peakRating)", title: "赛季最高", systemImage: "arrow.up.right", tint: TijingDesign.mint)
+                TijingMetricTile(value: "\(current.wins)胜 \(current.losses)负", title: "本季战绩", systemImage: "bolt.fill", tint: TijingDesign.indigo)
+                TijingMetricTile(value: "\(current.achievementCount)/\(current.achievementTotal)", title: "赛季成就", systemImage: "sparkles", tint: TijingDesign.amber)
+            }
+
+            HStack(spacing: 10) {
+                Button {
+                    Haptics.light()
+                    seasonPanel = .achievements
+                } label: {
+                    Label("赛季成就", systemImage: "sparkles")
+                        .frame(maxWidth: .infinity)
                 }
-                Spacer()
-                Image(systemName: "sparkles").font(.title2).foregroundStyle(.tint)
-            }
-            HStack(spacing: 10) {
-                seasonStat("\(current.peakRating)", "赛季最高", current.peakRank)
-                seasonStat("\(current.wins)胜 \(current.losses)负", "本季战绩", "\(current.battleCount) 场排位")
-                seasonStat("\(current.achievementCount)/\(current.achievementTotal)", "赛季成就", "已解锁")
-            }
-            HStack(spacing: 10) {
-                Button { seasonPanel = .achievements } label: { Label("赛季成就", systemImage: "sparkles") }
-                    .buttonStyle(.bordered)
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+
                 if seasonMe?.previous != nil {
-                    Button { seasonPanel = .previous } label: { Label("上赛季报告", systemImage: "trophy") }
-                        .buttonStyle(.bordered)
+                    Button {
+                        Haptics.light()
+                        seasonPanel = .previous
+                    } label: {
+                        Label("上季报告", systemImage: "clock.arrow.circlepath")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
                 }
             }
         }
-        .padding(.vertical, 4)
     }
 
-    private func seasonStat(_ value: String, _ title: String, _ detail: String) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(title).font(.caption2).foregroundStyle(.secondary)
-            Text(value).font(.subheadline.bold()).monospacedDigit().lineLimit(1).minimumScaleFactor(0.8)
-            Text(detail).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+    private var rankingListSection: some View {
+        VStack(spacing: 12) {
+            TijingSectionHeading(items.count > 3 ? "继续向上" : "本赛季排行")
+
+            TijingSettingsGroup {
+                ForEach(Array(items.dropFirst(min(3, items.count)))) { user in
+                    if session.token != nil {
+                        NavigationLink {
+                            PublicProfileView(userID: user.id)
+                        } label: {
+                            rankingRow(user)
+                        }
+                        .buttonStyle(.plain)
+                        .tijingTactileLink()
+                    } else {
+                        rankingRow(user)
+                    }
+                    if user.id != items.last?.id {
+                        Divider().padding(.leading, 68)
+                    }
+                }
+
+                if items.count <= 3 {
+                    Text("当前排行人数较少，完成排位后会继续出现更多名次。")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(16)
+                }
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
-        .background(Color(uiColor: .tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private func rankingRow(_ user: User) -> some View {
         HStack(spacing: 12) {
-            rankPosition(user.position)
-                .frame(width: 34)
-            RemoteAvatar(urlString: user.avatarURL, name: user.nickname, size: 42)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(user.nickname).font(.headline).lineLimit(1)
-                Text("\(user.rank) · \(seasonHonor(user.position ?? 0))")
-                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
-            }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 3) {
-                Text("\(user.rating)").font(.headline.monospacedDigit())
-                Text("竞点").font(.caption2).foregroundStyle(.secondary)
-            }
-        }
-        .padding(.vertical, 4)
-    }
-
-    @ViewBuilder
-    private func rankPosition(_ position: Int?) -> some View {
-        let value = position ?? 0
-        if (1...3).contains(value) {
-            Image(systemName: value == 1 ? "trophy.fill" : "medal.fill")
-                .font(.title3)
-                .foregroundStyle(value == 1 ? Color.yellow : Color.secondary)
-                .accessibilityLabel("第\(value)名")
-        } else {
-            Text("\(value)")
+            Text("\(user.position ?? 0)")
                 .font(.headline.monospacedDigit())
                 .foregroundStyle(.secondary)
+                .frame(width: 34)
+
+            RemoteAvatar(urlString: user.avatarURL, name: user.nickname, size: 42)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(user.nickname)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                Text("\(user.rank) · \(seasonHonor(user.position ?? 0))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(user.rating)")
+                    .font(.headline.monospacedDigit())
+                    .foregroundStyle(.primary)
+                Text("竞点")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Image(systemName: "chevron.right")
+                .font(.caption.bold())
+                .foregroundStyle(.tertiary)
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .contentShape(Rectangle())
     }
 
     private func seasonHonor(_ position: Int) -> String {
@@ -168,7 +268,8 @@ struct RankingView: View {
 
     @MainActor
     private func load() async {
-        loading = true; defer { loading = false }
+        loading = true
+        defer { loading = false }
         do {
             let response: RankingResponse = try await session.api.request("/api/rankings")
             items = response.items
@@ -179,7 +280,72 @@ struct RankingView: View {
             } else {
                 seasonMe = nil
             }
-        } catch { self.error = error.localizedDescription }
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+}
+
+private struct SeasonPodiumCard: View {
+    let user: User
+    let place: Int
+
+    private var tint: Color {
+        switch place {
+        case 1: TijingDesign.amber
+        case 2: Color(uiColor: .systemGray2)
+        default: Color(red: 0.78, green: 0.48, blue: 0.28)
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 9) {
+            ZStack(alignment: .topTrailing) {
+                RemoteAvatar(urlString: user.avatarURL, name: user.nickname, size: place == 1 ? 68 : 56)
+                    .overlay {
+                        Circle().stroke(tint.opacity(0.80), lineWidth: place == 1 ? 3 : 2)
+                    }
+                Text("\(place)")
+                    .font(.caption.bold())
+                    .foregroundStyle(.white)
+                    .frame(width: 24, height: 24)
+                    .background(tint, in: Circle())
+                    .offset(x: 5, y: -5)
+            }
+
+            Text(user.nickname)
+                .font(place == 1 ? .headline : .subheadline.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+
+            Text("\(user.rating)")
+                .font(.system(place == 1 ? .title2 : .headline, design: .rounded, weight: .bold))
+                .monospacedDigit()
+            Text(place == 1 ? "赛季之巅" : (place == 2 ? "一人之下" : "稳居前三"))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 8)
+        .padding(.top, place == 1 ? 20 : 15)
+        .padding(.bottom, place == 1 ? 18 : 15)
+        .background {
+            if place == 1 {
+                LinearGradient(
+                    colors: [tint.opacity(0.24), Color.accentColor.opacity(0.10)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            } else {
+                Rectangle().fill(.regularMaterial)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: TijingDesign.cardRadius, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: TijingDesign.cardRadius, style: .continuous)
+                .strokeBorder(tint.opacity(place == 1 ? 0.35 : 0.16))
+        }
     }
 }
 

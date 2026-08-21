@@ -4,157 +4,51 @@ import UIKit
 
 struct ProfileView: View {
     @Environment(SessionStore.self) private var session
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Binding var showingAuth: Bool
     @State private var stats: StatsResponse?
     @State private var confirmLogout = false
 
+    private var metricColumns: [GridItem] {
+        if dynamicTypeSize.isAccessibilitySize { return [GridItem(.flexible())] }
+        return [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
+    }
+
     var body: some View {
-        Group {
+        ZStack {
+            TijingPageBackground()
+
             if let user = session.user {
-                List {
-                    Section {
-                        NavigationLink {
-                            PublicProfileView(userID: user.id)
-                        } label: {
-                            HStack(spacing: 14) {
-                                RemoteAvatar(urlString: user.avatarURL, name: user.nickname, size: 62)
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(user.nickname)
-                                        .font(.title3.bold())
-                                        .lineLimit(1)
-                                    Text("\(user.rank) · \(user.rating) 竞点")
-                                        .font(.subheadline)
-                                        .foregroundStyle(.secondary)
-                                        .monospacedDigit()
-                                    if let bio = user.bio, !bio.isEmpty {
-                                        Text(bio)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                            .lineLimit(2)
-                                    }
-                                }
-                            }
-                            .padding(.vertical, 5)
+                ScrollView {
+                    LazyVStack(spacing: TijingDesign.sectionSpacing) {
+                        VStack(alignment: .leading, spacing: 7) {
+                            Text("我的")
+                                .font(.system(.largeTitle, design: .rounded, weight: .heavy))
+                            Text("账号、学习和对战，都收在这里。")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                        profileHero(user)
+                        metricsSection(user)
+                        accountSection
+                        activitySection
+                        supportSection
+                        logoutButton
                     }
-
-                    Section("学习与对战") {
-                        LabeledContent {
-                            Text("\(stats?.questions ?? user.questions ?? 0)")
-                                .fontWeight(.semibold)
-                                .monospacedDigit()
-                        } label: {
-                            Label("已刷题量", systemImage: "checkmark.circle")
-                        }
-
-                        LabeledContent {
-                            Text(TijingFormat.percent(stats?.accuracy ?? user.accuracy))
-                                .fontWeight(.semibold)
-                                .monospacedDigit()
-                        } label: {
-                            Label("正确率", systemImage: "scope")
-                        }
-
-                        LabeledContent {
-                            Text("\(stats?.wins ?? user.wins)胜  \(stats?.losses ?? user.losses)负")
-                                .fontWeight(.semibold)
-                                .monospacedDigit()
-                        } label: {
-                            Label("排位战绩", systemImage: "trophy")
-                        }
-                    }
-
-                    Section("个人") {
-                        NavigationLink {
-                            EditProfileView()
-                        } label: {
-                            Label("编辑资料", systemImage: "person.crop.circle.badge.pencil")
-                        }
-
-                        NavigationLink {
-                            AccountSecurityView()
-                        } label: {
-                            Label("账号与安全", systemImage: "lock.shield")
-                        }
-                    }
-
-                    Section("记录与社交") {
-                        NavigationLink {
-                            BattleHistoryView()
-                        } label: {
-                            Label("历史战绩", systemImage: "clock.arrow.circlepath")
-                        }
-
-                        NavigationLink {
-                            NotificationsView()
-                        } label: {
-                            HStack {
-                                Label("通知中心", systemImage: "bell")
-                                Spacer()
-                                if session.unreadNotifications > 0 {
-                                    Text("\(session.unreadNotifications)")
-                                        .font(.caption.bold())
-                                        .foregroundStyle(.white)
-                                        .padding(.horizontal, 7)
-                                        .padding(.vertical, 2)
-                                        .background(.tint, in: Capsule())
-                                }
-                            }
-                        }
-
-                        NavigationLink {
-                            FriendsView()
-                        } label: {
-                            Label("好友与黑名单", systemImage: "person.2")
-                        }
-                    }
-
-                    Section("关于与反馈") {
-                        NavigationLink {
-                            SuggestionView()
-                        } label: {
-                            Label("功能建议", systemImage: "text.bubble")
-                        }
-
-                        NavigationLink {
-                            TermsView()
-                        } label: {
-                            Label("使用条款", systemImage: "doc.text")
-                        }
-
-                        NavigationLink {
-                            PrivacyView()
-                        } label: {
-                            Label("隐私政策", systemImage: "hand.raised")
-                        }
-                    }
-
-                    Section {
-                        Button("退出登录", role: .destructive) {
-                            Haptics.warning()
-                            confirmLogout = true
-                        }
-                    }
+                    .padding(.horizontal, TijingDesign.pageHorizontalPadding)
+                    .padding(.top, 10)
+                    .padding(.bottom, 30)
                 }
-                .listStyle(.insetGrouped)
                 .refreshable { await refresh() }
             } else {
-                ContentUnavailableView {
-                    Label("尚未登录", systemImage: "person.crop.circle")
-                } description: {
-                    Text("登录后可同步你的刷题、错题、收藏、好友和对战数据。")
-                } actions: {
-                    Button("登录 / 注册") {
-                        Haptics.selection()
-                        showingAuth = true
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                }
+                signedOutView
+                    .padding(.horizontal, TijingDesign.pageHorizontalPadding)
             }
         }
-        .navigationTitle("我的")
-        .navigationBarTitleDisplayMode(.large)
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
         .task(id: session.user?.id) { await refresh() }
         .confirmationDialog("退出当前账号？", isPresented: $confirmLogout, titleVisibility: .visible) {
             Button("退出登录", role: .destructive) {
@@ -163,6 +57,232 @@ struct ProfileView: View {
             Button("取消", role: .cancel) { }
         } message: {
             Text("本机登录状态会被清除；服务器上的刷题、收藏、好友和对战记录不会删除。")
+        }
+    }
+
+    private func profileHero(_ user: User) -> some View {
+        NavigationLink {
+            PublicProfileView(userID: user.id)
+        } label: {
+            TijingHeroCard(
+                gradient: LinearGradient(
+                    colors: [Color(red: 0.12, green: 0.15, blue: 0.28), TijingDesign.indigo, Color.accentColor],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            ) {
+                HStack(spacing: 16) {
+                    RemoteAvatar(urlString: user.avatarURL, name: user.nickname, size: 76)
+                        .overlay {
+                            Circle().stroke(.white.opacity(0.35), lineWidth: 2)
+                        }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 7) {
+                            Text(user.nickname)
+                                .font(.title2.bold())
+                                .lineLimit(1)
+                            if user.isAdmin == true {
+                                Image(systemName: "checkmark.seal.fill")
+                                    .foregroundStyle(TijingDesign.cyan)
+                            }
+                        }
+                        Text("\(user.rank) · \(user.rating) 竞点")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.white.opacity(0.80))
+                            .monospacedDigit()
+                        if let bio = user.bio, !bio.isEmpty {
+                            Text(bio)
+                                .font(.caption)
+                                .foregroundStyle(.white.opacity(0.68))
+                                .lineLimit(2)
+                        } else {
+                            Text("给自己留一句上岸宣言")
+                                .font(.caption)
+                                .foregroundStyle(.white.opacity(0.62))
+                        }
+                    }
+
+                    Spacer(minLength: 6)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.bold())
+                        .foregroundStyle(.white.opacity(0.65))
+                }
+                .foregroundStyle(.white)
+            }
+        }
+        .buttonStyle(TijingPressableCardStyle())
+        .tijingTactileLink()
+    }
+
+    private func metricsSection(_ user: User) -> some View {
+        VStack(spacing: 12) {
+            TijingSectionHeading("这一阶段")
+            LazyVGrid(columns: metricColumns, spacing: 10) {
+                TijingMetricTile(
+                    value: "\(stats?.questions ?? user.questions ?? 0)",
+                    title: "已刷题量",
+                    systemImage: "checkmark.circle.fill",
+                    tint: .accentColor
+                )
+                TijingMetricTile(
+                    value: TijingFormat.percent(stats?.accuracy ?? user.accuracy),
+                    title: "正确率",
+                    systemImage: "scope",
+                    tint: TijingDesign.mint
+                )
+                TijingMetricTile(
+                    value: "\(stats?.wins ?? user.wins)胜 \(stats?.losses ?? user.losses)负",
+                    title: "排位战绩",
+                    systemImage: "trophy.fill",
+                    tint: TijingDesign.amber
+                )
+            }
+        }
+    }
+
+    private var accountSection: some View {
+        VStack(spacing: 12) {
+            TijingSectionHeading("账号")
+            TijingSettingsGroup {
+                NavigationLink {
+                    EditProfileView()
+                } label: {
+                    TijingSettingsRow("编辑资料", subtitle: "头像、昵称、简介与性别", systemImage: "person.crop.circle.badge.pencil", tint: TijingDesign.indigo)
+                }
+                .buttonStyle(.plain)
+                .tijingTactileLink()
+
+                Divider().padding(.leading, 62)
+
+                NavigationLink {
+                    AccountSecurityView()
+                } label: {
+                    TijingSettingsRow("账号与安全", subtitle: "密码、邮箱与登录安全", systemImage: "lock.shield.fill", tint: TijingDesign.mint)
+                }
+                .buttonStyle(.plain)
+                .tijingTactileLink()
+            }
+        }
+    }
+
+    private var activitySection: some View {
+        VStack(spacing: 12) {
+            TijingSectionHeading("记录与社交")
+            TijingSettingsGroup {
+                NavigationLink {
+                    BattleHistoryView()
+                } label: {
+                    TijingSettingsRow("历史战绩", systemImage: "clock.arrow.circlepath", tint: TijingDesign.violet)
+                }
+                .buttonStyle(.plain)
+                .tijingTactileLink()
+
+                Divider().padding(.leading, 62)
+
+                NavigationLink {
+                    NotificationsView()
+                } label: {
+                    TijingSettingsRow(
+                        "通知中心",
+                        systemImage: "bell.fill",
+                        tint: TijingDesign.coral,
+                        trailing: session.unreadNotifications > 0 ? "\(session.unreadNotifications)" : nil
+                    )
+                }
+                .buttonStyle(.plain)
+                .tijingTactileLink()
+
+                Divider().padding(.leading, 62)
+
+                NavigationLink {
+                    FriendsView()
+                } label: {
+                    TijingSettingsRow("好友与黑名单", systemImage: "person.2.fill", tint: TijingDesign.cyan)
+                }
+                .buttonStyle(.plain)
+                .tijingTactileLink()
+            }
+        }
+    }
+
+    private var supportSection: some View {
+        VStack(spacing: 12) {
+            TijingSectionHeading("关于")
+            TijingSettingsGroup {
+                NavigationLink {
+                    SuggestionView()
+                } label: {
+                    TijingSettingsRow("功能建议", systemImage: "text.bubble.fill", tint: TijingDesign.amber)
+                }
+                .buttonStyle(.plain)
+                .tijingTactileLink()
+
+                Divider().padding(.leading, 62)
+
+                NavigationLink {
+                    TermsView()
+                } label: {
+                    TijingSettingsRow("使用条款", systemImage: "doc.text.fill", tint: .secondary)
+                }
+                .buttonStyle(.plain)
+                .tijingTactileLink()
+
+                Divider().padding(.leading, 62)
+
+                NavigationLink {
+                    PrivacyView()
+                } label: {
+                    TijingSettingsRow("隐私政策", systemImage: "hand.raised.fill", tint: .secondary)
+                }
+                .buttonStyle(.plain)
+                .tijingTactileLink()
+            }
+        }
+    }
+
+    private var logoutButton: some View {
+        Button(role: .destructive) {
+            Haptics.warning()
+            confirmLogout = true
+        } label: {
+            Label("退出登录", systemImage: "rectangle.portrait.and.arrow.right")
+                .font(.body.weight(.semibold))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+        }
+        .buttonStyle(.bordered)
+        .tint(.red)
+    }
+
+    private var signedOutView: some View {
+        VStack(spacing: 22) {
+            Spacer(minLength: 60)
+            TijingHeroCard {
+                VStack(alignment: .leading, spacing: 14) {
+                    Image(systemName: "person.crop.circle.badge.plus")
+                        .font(.system(size: 40, weight: .semibold))
+                    Text("登录后，这里才是你的")
+                        .font(.title2.bold())
+                    Text("同步刷题、错题、收藏、好友和排位记录。")
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.78))
+                    Button {
+                        Haptics.medium()
+                        showingAuth = true
+                    } label: {
+                        Text("登录 / 注册")
+                            .font(.headline)
+                            .foregroundStyle(.black)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(.white, in: Capsule())
+                    }
+                    .buttonStyle(TijingPressableCardStyle())
+                }
+                .foregroundStyle(.white)
+            }
+            Spacer()
         }
     }
 
