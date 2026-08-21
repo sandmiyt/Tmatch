@@ -160,7 +160,6 @@ final class PracticeSessionStore {
         guard let question = currentQuestion, feedback[String(question.id)] == nil else { return }
         let key = String(question.id)
         var values = excluded[key] ?? []
-        let wasExcluded = values.contains(displayIndex)
         if let position = values.firstIndex(of: displayIndex) {
             values.remove(at: position)
         } else {

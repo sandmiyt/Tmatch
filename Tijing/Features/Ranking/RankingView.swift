@@ -721,15 +721,27 @@ struct PublicProfileView: View {
                         .buttonStyle(.borderedProminent)
                     }
 
-                    Button {
-                        Haptics.selection()
-                        friendAction(user)
-                    } label: {
-                        Label(friendActionTitle(user), systemImage: friendActionIcon(user))
-                            .frame(maxWidth: .infinity)
+                    if user.friendStatus == "friend" {
+                        Button {
+                            Haptics.selection()
+                            friendAction(user)
+                        } label: {
+                            Label(friendActionTitle(user), systemImage: friendActionIcon(user))
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(busy || user.friendStatus == "outgoing")
+                    } else {
+                        Button {
+                            Haptics.selection()
+                            friendAction(user)
+                        } label: {
+                            Label(friendActionTitle(user), systemImage: friendActionIcon(user))
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(busy || user.friendStatus == "outgoing")
                     }
-                    .buttonStyle(user.friendStatus == "friend" ? .bordered : .borderedProminent)
-                    .disabled(busy || user.friendStatus == "outgoing")
                 }
                 .controlSize(.large)
 

@@ -74,6 +74,7 @@ struct PresenceResponse: Decodable {
 }
 
 struct ChallengeRoute: Identifiable, Hashable { let id: String }
+struct UserCardTarget: Identifiable, Hashable { let id: Int }
 
 
 struct SeasonPublicInfo: Decodable, Hashable {
