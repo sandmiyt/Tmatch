@@ -122,6 +122,21 @@ struct PracticeSettingsView: View {
                     minimumGap: 30
                 )
 
+                HStack(spacing: 0) {
+                    ForEach([0, 20, 40, 60, 80, 100], id: \.self) { value in
+                        Button {
+                            snapDifficulty(to: value)
+                        } label: {
+                            Text("\(value)")
+                                .font(.caption2.monospacedDigit())
+                                .foregroundStyle(difficultyAnchorIsActive(value) ? TijingDesign.indigo : .secondary)
+                                .fontWeight(difficultyAnchorIsActive(value) ? .semibold : .regular)
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
                 HStack {
                     Label("更难", systemImage: "flame.fill")
                         .foregroundStyle(TijingDesign.coral)
@@ -137,6 +152,23 @@ struct PracticeSettingsView: View {
             .padding(18)
             .tijingCard()
         }
+    }
+
+    private func difficultyAnchorIsActive(_ value: Int) -> Bool {
+        abs(value - draft.difficultyMinRatio) <= 4 || abs(value - draft.difficultyMaxRatio) <= 4
+    }
+
+    private func snapDifficulty(to value: Int) {
+        let lowerDistance = abs(value - draft.difficultyMinRatio)
+        let upperDistance = abs(value - draft.difficultyMaxRatio)
+        withAnimation(.snappy(duration: 0.24)) {
+            if lowerDistance <= upperDistance {
+                draft.difficultyMinRatio = min(value, draft.difficultyMaxRatio - 30)
+            } else {
+                draft.difficultyMaxRatio = max(value, draft.difficultyMinRatio + 30)
+            }
+        }
+        Haptics.selection()
     }
 
     private var answerModeCard: some View {
@@ -179,7 +211,8 @@ struct PracticeSettingsView: View {
 
 private struct TijingQuestionCountSlider: View {
     @Binding var value: Int
-    @State private var isDragging = false
+    @State private var dragValue: CGFloat?
+    @State private var lastFeedbackBucket: Int?
 
     private let lowerBound = 10
     private let upperBound = 40
@@ -188,7 +221,8 @@ private struct TijingQuestionCountSlider: View {
     var body: some View {
         GeometryReader { proxy in
             let trackWidth = max(1, proxy.size.width - thumbSize)
-            let progress = CGFloat(value - lowerBound) / CGFloat(upperBound - lowerBound)
+            let displayValue = dragValue ?? CGFloat(value)
+            let progress = (displayValue - CGFloat(lowerBound)) / CGFloat(upperBound - lowerBound)
             let thumbX = thumbSize / 2 + progress * trackWidth
 
             ZStack(alignment: .leading) {
@@ -198,13 +232,7 @@ private struct TijingQuestionCountSlider: View {
                     .padding(.horizontal, thumbSize / 2)
 
                 Capsule()
-                    .fill(
-                        LinearGradient(
-                            colors: [TijingDesign.indigo, TijingDesign.violet],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
+                    .fill(LinearGradient(colors: [TijingDesign.indigo, TijingDesign.violet], startPoint: .leading, endPoint: .trailing))
                     .frame(width: max(0, thumbX - thumbSize / 2), height: 8)
                     .offset(x: thumbSize / 2)
 
@@ -212,45 +240,50 @@ private struct TijingQuestionCountSlider: View {
                     let tickProgress = CGFloat(tick - lowerBound) / CGFloat(upperBound - lowerBound)
                     let tickX = thumbSize / 2 + tickProgress * trackWidth
                     Circle()
-                        .fill(tick <= value ? Color.white.opacity(0.9) : Color.secondary.opacity(0.28))
-                        .frame(width: tick == value ? 6 : 4, height: tick == value ? 6 : 4)
+                        .fill(CGFloat(tick) <= displayValue ? Color.white.opacity(0.92) : Color.secondary.opacity(0.28))
+                        .frame(width: abs(CGFloat(tick) - displayValue) < 0.65 ? 6 : 4,
+                               height: abs(CGFloat(tick) - displayValue) < 0.65 ? 6 : 4)
                         .position(x: tickX, y: 30)
                         .allowsHitTesting(false)
                 }
 
                 ZStack {
-                    Circle()
-                        .fill(.background)
-                        .shadow(color: Color.black.opacity(isDragging ? 0.16 : 0.08), radius: isDragging ? 8 : 4, y: 2)
-                    Circle()
-                        .strokeBorder(TijingDesign.indigo.opacity(isDragging ? 1 : 0.72), lineWidth: isDragging ? 2.5 : 1.5)
+                    Circle().fill(.background)
+                        .shadow(color: Color.black.opacity(dragValue == nil ? 0.08 : 0.15), radius: dragValue == nil ? 4 : 8, y: 2)
+                    Circle().strokeBorder(TijingDesign.indigo.opacity(dragValue == nil ? 0.72 : 1), lineWidth: dragValue == nil ? 1.5 : 2.5)
                     Image(systemName: "line.3.horizontal")
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(TijingDesign.indigo)
                 }
                 .frame(width: thumbSize, height: thumbSize)
-                .scaleEffect(isDragging ? 1.12 : 1)
+                .scaleEffect(dragValue == nil ? 1 : 1.10)
                 .position(x: thumbX, y: 30)
-                .animation(.spring(response: 0.24, dampingFraction: 0.72), value: isDragging)
             }
             .frame(height: 60)
             .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { gesture in
-                        if !isDragging {
-                            isDragging = true
-                            Haptics.light()
-                        }
                         let localX = min(max(0, gesture.location.x - thumbSize / 2), trackWidth)
-                        let raw = Double(localX / trackWidth) * Double(upperBound - lowerBound) + Double(lowerBound)
-                        value = min(upperBound, max(lowerBound, Int(raw.rounded())))
+                        let raw = CGFloat(lowerBound) + (localX / trackWidth) * CGFloat(upperBound - lowerBound)
+                        dragValue = raw
+                        let rounded = min(upperBound, max(lowerBound, Int(raw.rounded())))
+                        if rounded != value { value = rounded }
+                        let bucket = Int((Double(rounded) / 5.0).rounded())
+                        if bucket != lastFeedbackBucket {
+                            lastFeedbackBucket = bucket
+                            Haptics.selection()
+                        }
                     }
                     .onEnded { _ in
-                        isDragging = false
+                        let snapped = min(upperBound, max(lowerBound, value))
+                        withAnimation(.spring(response: 0.30, dampingFraction: 0.82)) { dragValue = nil }
+                        value = snapped
+                        lastFeedbackBucket = nil
                         Haptics.light()
                     }
             )
+            .animation(.interactiveSpring(response: 0.22, dampingFraction: 0.86), value: value)
         }
         .frame(height: 60)
         .accessibilityElement(children: .ignore)
@@ -258,17 +291,13 @@ private struct TijingQuestionCountSlider: View {
         .accessibilityValue("\(value) 题")
         .accessibilityAdjustableAction { direction in
             switch direction {
-            case .increment:
-                value = min(upperBound, value + 1)
-            case .decrement:
-                value = max(lowerBound, value - 1)
-            @unknown default:
-                break
+            case .increment: value = min(upperBound, value + 1)
+            case .decrement: value = max(lowerBound, value - 1)
+            @unknown default: break
             }
         }
     }
 }
-
 
 private struct TijingDifficultyRangeSlider: View {
     @Binding var lower: Int
@@ -276,97 +305,101 @@ private struct TijingDifficultyRangeSlider: View {
     let minimumGap: Int
 
     @State private var activeHandle: Handle?
+    @State private var dragDisplayValue: CGFloat?
+    @State private var lastFeedbackBucket: Int?
 
     private enum Handle { case lower, upper }
-    private let thumbSize: CGFloat = 28
+    private let thumbSize: CGFloat = 30
 
     var body: some View {
         GeometryReader { proxy in
             let trackWidth = max(1, proxy.size.width - thumbSize)
-            let lowerX = xPosition(for: lower, trackWidth: trackWidth)
-            let upperX = xPosition(for: upper, trackWidth: trackWidth)
+            let lowerDisplay = activeHandle == .lower ? (dragDisplayValue ?? CGFloat(lower)) : CGFloat(lower)
+            let upperDisplay = activeHandle == .upper ? (dragDisplayValue ?? CGFloat(upper)) : CGFloat(upper)
+            let lowerX = xPosition(for: lowerDisplay, trackWidth: trackWidth)
+            let upperX = xPosition(for: upperDisplay, trackWidth: trackWidth)
 
             ZStack(alignment: .leading) {
+                Capsule().fill(Color.secondary.opacity(0.14)).frame(height: 8).padding(.horizontal, thumbSize / 2)
                 Capsule()
-                    .fill(Color.secondary.opacity(0.14))
-                    .frame(height: 8)
-                    .padding(.horizontal, thumbSize / 2)
-
-                Capsule()
-                    .fill(
-                        LinearGradient(
-                            colors: [TijingDesign.violet, TijingDesign.indigo, TijingDesign.cyan],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
+                    .fill(LinearGradient(colors: [TijingDesign.violet, TijingDesign.indigo, TijingDesign.cyan], startPoint: .leading, endPoint: .trailing))
                     .frame(width: max(0, upperX - lowerX), height: 8)
                     .offset(x: lowerX)
 
-                thumb(value: lower, isActive: activeHandle == .lower)
-                    .position(x: lowerX, y: 28)
-
-                thumb(value: upper, isActive: activeHandle == .upper)
-                    .position(x: upperX, y: 28)
+                thumb(value: Int(lowerDisplay.rounded()), isActive: activeHandle == .lower)
+                    .position(x: lowerX, y: 29)
+                thumb(value: Int(upperDisplay.rounded()), isActive: activeHandle == .upper)
+                    .position(x: upperX, y: 29)
             }
-            .frame(height: 56)
+            .frame(height: 58)
             .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 0)
-                    .onChanged { value in
+                    .onChanged { gesture in
                         if activeHandle == nil {
-                            activeHandle = abs(value.location.x - lowerX) <= abs(value.location.x - upperX) ? .lower : .upper
+                            activeHandle = abs(gesture.location.x - lowerX) <= abs(gesture.location.x - upperX) ? .lower : .upper
                             Haptics.light()
                         }
-                        update(locationX: value.location.x, trackWidth: trackWidth)
+                        updateContinuously(locationX: gesture.location.x, trackWidth: trackWidth)
                     }
                     .onEnded { _ in
-                        activeHandle = nil
+                        withAnimation(.spring(response: 0.30, dampingFraction: 0.84)) {
+                            dragDisplayValue = nil
+                            activeHandle = nil
+                        }
+                        lastFeedbackBucket = nil
                         Haptics.light()
                     }
             )
         }
-        .frame(height: 56)
+        .frame(height: 58)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("题目难度范围")
         .accessibilityValue("最低正确率 \(lower)%，最高正确率 \(upper)%")
     }
 
-    private func xPosition(for value: Int, trackWidth: CGFloat) -> CGFloat {
-        thumbSize / 2 + CGFloat(value) / 100 * trackWidth
+    private func xPosition(for value: CGFloat, trackWidth: CGFloat) -> CGFloat {
+        thumbSize / 2 + min(100, max(0, value)) / 100 * trackWidth
     }
 
-    private func value(for x: CGFloat, trackWidth: CGFloat) -> Int {
+    private func rawValue(for x: CGFloat, trackWidth: CGFloat) -> CGFloat {
         let local = min(max(0, x - thumbSize / 2), trackWidth)
-        return min(100, max(0, Int((local / trackWidth * 100).rounded())))
+        return min(100, max(0, local / trackWidth * 100))
     }
 
-    private func update(locationX: CGFloat, trackWidth: CGFloat) {
-        let next = value(for: locationX, trackWidth: trackWidth)
+    private func updateContinuously(locationX: CGFloat, trackWidth: CGFloat) {
+        let raw = rawValue(for: locationX, trackWidth: trackWidth)
+        let clamped: CGFloat
         switch activeHandle {
         case .lower:
-            lower = min(next, upper - minimumGap)
+            clamped = min(raw, CGFloat(upper - minimumGap))
+            dragDisplayValue = clamped
+            lower = min(Int(clamped.rounded()), upper - minimumGap)
         case .upper:
-            upper = max(next, lower + minimumGap)
+            clamped = max(raw, CGFloat(lower + minimumGap))
+            dragDisplayValue = clamped
+            upper = max(Int(clamped.rounded()), lower + minimumGap)
         case nil:
-            break
+            return
+        }
+        let bucket = Int((Double(Int(clamped.rounded())) / 5.0).rounded())
+        if bucket != lastFeedbackBucket {
+            lastFeedbackBucket = bucket
+            Haptics.selection()
         }
     }
 
     private func thumb(value: Int, isActive: Bool) -> some View {
         ZStack {
-            Circle()
-                .fill(.background)
-                .shadow(color: Color.black.opacity(isActive ? 0.16 : 0.09), radius: isActive ? 7 : 4, y: 2)
-            Circle()
-                .strokeBorder(isActive ? TijingDesign.indigo : Color.secondary.opacity(0.25), lineWidth: isActive ? 2.5 : 1)
+            Circle().fill(.background)
+                .shadow(color: Color.black.opacity(isActive ? 0.16 : 0.09), radius: isActive ? 8 : 4, y: 2)
+            Circle().strokeBorder(isActive ? TijingDesign.indigo : Color.secondary.opacity(0.25), lineWidth: isActive ? 2.5 : 1)
             Text("\(value)")
                 .font(.system(size: 9, weight: .bold, design: .rounded))
                 .monospacedDigit()
                 .foregroundStyle(isActive ? TijingDesign.indigo : .secondary)
         }
         .frame(width: thumbSize, height: thumbSize)
-        .scaleEffect(isActive ? 1.14 : 1)
-        .animation(.spring(response: 0.24, dampingFraction: 0.72), value: isActive)
+        .scaleEffect(isActive ? 1.13 : 1)
     }
 }

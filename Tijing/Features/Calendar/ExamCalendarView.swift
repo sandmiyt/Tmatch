@@ -9,6 +9,7 @@ struct ExamCalendarView: View {
     @State private var loading = false
     @State private var error: String?
     @State private var browserTarget: ExamBrowserTarget?
+    @State private var selectedExam: RecruitmentExam?
 
     var body: some View {
         ZStack {
@@ -45,6 +46,11 @@ struct ExamCalendarView: View {
         .refreshable { await load() }
         .sensoryFeedback(.selection, trigger: city)
         .sensoryFeedback(.selection, trigger: followedOnly)
+        .sheet(item: $selectedExam) { exam in
+            ExamDetailSheet(exam: exam)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
         .sheet(item: $browserTarget) { target in
             ExamInAppBrowser(url: target.url)
                 .ignoresSafeArea()
@@ -190,6 +196,12 @@ struct ExamCalendarView: View {
                         Text(exam.title).font(.headline)
                         Text([exam.city, exam.examKind].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
                             .font(.caption).foregroundStyle(.secondary)
+                        if let sourceName = exam.sourceName, !sourceName.isEmpty {
+                            Text(sourceName)
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                                .lineLimit(1)
+                        }
                     }
                     Spacer(minLength: 8)
                     Button {
@@ -235,6 +247,11 @@ struct ExamCalendarView: View {
                 }
             }
         }
+        .contentShape(RoundedRectangle(cornerRadius: TijingDesign.cardRadius, style: .continuous))
+        .onTapGesture {
+            Haptics.selection()
+            selectedExam = exam
+        }
     }
 
     @MainActor private func load() async {
@@ -271,6 +288,115 @@ struct ExamCalendarView: View {
 }
 
 private struct FollowResponse: Decodable { let followed: Bool?; let examID: Int?; enum CodingKeys: String, CodingKey { case followed; case examID = "exam_id" } }
+private struct ExamDetailSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let exam: RecruitmentExam
+    @State private var browserTarget: ExamBrowserTarget?
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                TijingPageBackground()
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        TijingPaperCard(tint: TijingDesign.butter, rotation: -0.18) {
+                            VStack(alignment: .leading, spacing: 9) {
+                                HStack(spacing: 10) {
+                                    TijingStickerIcon(systemImage: "calendar.badge.clock", tint: TijingDesign.amber, background: TijingDesign.butter, size: 44, rotation: -6, sparkle: false)
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(exam.city ?? "四川")
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundStyle(TijingDesign.amber)
+                                        Text(exam.title)
+                                            .font(.headline)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    }
+                                }
+                                if let source = exam.sourceName, !source.isEmpty {
+                                    Label(source, systemImage: "building.columns")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+
+                        VStack(spacing: 0) {
+                            detailRow("公告发布", value: exam.announcementDate, icon: "megaphone.fill", tint: TijingDesign.violet)
+                            detailRow("报名开始", value: exam.registrationStart, icon: "play.circle.fill", tint: TijingDesign.mint)
+                            detailRow("报名截止", value: exam.registrationEnd, icon: "stop.circle.fill", tint: TijingDesign.coral)
+                            detailRow("缴费截止", value: exam.paymentDeadline, icon: "creditcard.fill", tint: TijingDesign.amber)
+                            detailRow("准考证打印", value: dateRange(exam.admissionStart, exam.admissionEnd), icon: "doc.text.fill", tint: TijingDesign.indigo)
+                            detailRow("笔试时间", value: exam.examDate, icon: "pencil.and.scribble", tint: TijingDesign.violet, showDivider: false)
+                        }
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        .overlay { RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Color.primary.opacity(0.055)) }
+
+                        if let excerpt = exam.sourceExcerpt, !excerpt.isEmpty {
+                            TijingPaperCard(tint: TijingDesign.sky) {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Label("公告摘要", systemImage: "text.alignleft")
+                                        .font(.subheadline.weight(.semibold))
+                                    Text(excerpt)
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                        .lineSpacing(4)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                        }
+
+                        if let source = exam.sourceURL, let url = URL(string: source) {
+                            Button {
+                                Haptics.light()
+                                browserTarget = ExamBrowserTarget(url: url)
+                            } label: {
+                                Label("在应用内查看完整官方公告", systemImage: "safari.fill")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(TijingPrimaryButtonStyle())
+                        }
+                    }
+                    .padding(.horizontal, TijingDesign.pageHorizontalPadding)
+                    .padding(.top, 10)
+                    .padding(.bottom, 28)
+                }
+            }
+            .navigationTitle("考试详情")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
+            .sheet(item: $browserTarget) { target in ExamInAppBrowser(url: target.url).ignoresSafeArea() }
+        }
+    }
+
+    @ViewBuilder
+    private func detailRow(_ title: String, value: String?, icon: String, tint: Color, showDivider: Bool = true) -> some View {
+        if let value, !value.isEmpty {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(tint)
+                    .frame(width: 34, height: 34)
+                    .background(tint.opacity(0.11), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                Text(title).font(.subheadline).foregroundStyle(.secondary)
+                Spacer(minLength: 10)
+                Text(value.contains(" ~ ") ? value : TijingFormat.dateTime(value))
+                    .font(.subheadline.weight(.semibold))
+                    .multilineTextAlignment(.trailing)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            if showDivider { Divider().padding(.leading, 60) }
+        }
+    }
+
+    private func dateRange(_ start: String?, _ end: String?) -> String? {
+        if let start, let end, start != end { return "\(TijingFormat.dateTime(start)) ~ \(TijingFormat.dateTime(end))" }
+        if let start { return TijingFormat.dateTime(start) }
+        if let end { return TijingFormat.dateTime(end) }
+        return nil
+    }
+}
+
 private struct ExamBrowserTarget: Identifiable {
     let url: URL
     var id: String { url.absoluteString }

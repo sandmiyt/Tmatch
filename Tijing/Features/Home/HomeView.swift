@@ -5,6 +5,7 @@ struct HomeView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Binding var showingAuth: Bool
     @State private var loadError: String?
+    @State private var calendarCarouselIndex = 0
 
     private var stats: StatsResponse? { session.homeStats }
     private var smartReview: SmartReviewSummary? { session.homeSmartReview }
@@ -100,24 +101,33 @@ struct HomeView: View {
                 topic: dailyPlan?.analysis.summary.focus?.topic
             )
         } label: {
-            TijingHeroCard {
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 18) {
-                        heroCopy
-                        Spacer(minLength: 8)
-                        TijingProgressRing(
-                            progress: stats.map { Double($0.accuracy7d) / 100 } ?? 0,
-                            value: TijingFormat.percent(stats?.accuracy7d),
-                            caption: "近 7 天"
-                        )
-                    }
-                    VStack(alignment: .leading, spacing: 18) {
-                        heroCopy
-                        TijingProgressRing(
-                            progress: stats.map { Double($0.accuracy7d) / 100 } ?? 0,
-                            value: TijingFormat.percent(stats?.accuracy7d),
-                            caption: "近 7 天"
-                        )
+            TijingHeroCard(
+                gradient: LinearGradient(
+                    colors: [Color(red: 0.20, green: 0.22, blue: 0.55), TijingDesign.indigo, TijingDesign.violet.opacity(0.92)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            ) {
+                ZStack(alignment: .topTrailing) {
+                    Circle()
+                        .fill(.white.opacity(0.10))
+                        .frame(width: 118, height: 118)
+                        .offset(x: 42, y: -48)
+                    Circle()
+                        .stroke(.white.opacity(0.11), lineWidth: 1)
+                        .frame(width: 74, height: 74)
+                        .offset(x: 12, y: 12)
+
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .center, spacing: 18) {
+                            livelyHeroCopy
+                            Spacer(minLength: 4)
+                            practiceHeroVisual
+                        }
+                        VStack(alignment: .leading, spacing: 18) {
+                            livelyHeroCopy
+                            practiceHeroVisual
+                        }
                     }
                 }
                 .foregroundStyle(.white)
@@ -127,11 +137,21 @@ struct HomeView: View {
         .tijingTactileLink()
     }
 
-    private var heroCopy: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label("继续刷题", systemImage: "play.fill")
-                .font(.headline)
-                .foregroundStyle(.white.opacity(0.86))
+    private var livelyHeroCopy: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            HStack(spacing: 8) {
+                TijingStickerIcon(
+                    systemImage: "book.pages.fill",
+                    tint: .white,
+                    background: .white.opacity(0.16),
+                    size: 38,
+                    rotation: -5,
+                    sparkle: false
+                )
+                Text("继续刷题")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.84))
+            }
 
             Text(dailyPlan?.analysis.summary.focus?.topic ?? dailyPlan?.analysis.summary.focus?.subject ?? "今天继续稳住手感")
                 .font(.system(.title2, design: .rounded, weight: .bold))
@@ -139,19 +159,57 @@ struct HomeView: View {
 
             Text(dailyPlanSubtitle)
                 .font(.subheadline)
-                .foregroundStyle(.white.opacity(0.78))
+                .foregroundStyle(.white.opacity(0.76))
                 .lineLimit(2)
 
-            HStack(spacing: 7) {
-                Text("开始下一组")
-                    .font(.subheadline.bold())
-                Image(systemName: "arrow.right")
-                    .font(.caption.bold())
+            HStack(spacing: 8) {
+                if let total = stats?.total {
+                    heroMetric("\(total)", "已刷", icon: "checkmark.circle.fill")
+                }
+                heroMetric(TijingFormat.percent(stats?.accuracy7d), "近7天", icon: "chart.line.uptrend.xyaxis")
             }
-            .padding(.horizontal, 13)
-            .padding(.vertical, 9)
-            .background(.white.opacity(0.16), in: Capsule())
         }
+    }
+
+    private func heroMetric(_ value: String, _ title: String, icon: String) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: icon).font(.caption2.weight(.bold))
+            Text(value).font(.caption.weight(.bold)).monospacedDigit()
+            Text(title).font(.caption2).opacity(0.72)
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 6)
+        .background(.white.opacity(0.12), in: Capsule())
+    }
+
+    private var practiceHeroVisual: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(.white.opacity(0.11))
+                .frame(width: 110, height: 132)
+                .rotationEffect(.degrees(7))
+                .offset(x: 7, y: 3)
+
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(.white.opacity(0.18))
+                .frame(width: 110, height: 132)
+                .rotationEffect(.degrees(-3))
+                .overlay {
+                    VStack(spacing: 10) {
+                        TijingProgressRing(
+                            progress: stats.map { Double($0.accuracy7d) / 100 } ?? 0,
+                            value: TijingFormat.percent(stats?.accuracy7d),
+                            caption: "正确率"
+                        )
+                        HStack(spacing: 5) {
+                            Text("开始下一组").font(.caption.weight(.semibold))
+                            Image(systemName: "arrow.up.right").font(.caption2.bold())
+                        }
+                    }
+                    .padding(10)
+                }
+        }
+        .frame(width: 126, height: 144)
     }
 
     private var todaySection: some View {
@@ -187,20 +245,7 @@ struct HomeView: View {
                 .tijingTactileLink()
             }
 
-            NavigationLink {
-                ExamCalendarView()
-            } label: {
-                TijingSettingsGroup {
-                    TijingSettingsRow(
-                        "考试日历",
-                        subtitle: calendarSubtitle,
-                        systemImage: "calendar.badge.clock",
-                        tint: TijingDesign.amber
-                    )
-                }
-            }
-            .buttonStyle(TijingPressableCardStyle())
-            .tijingTactileLink()
+            examCalendarCarousel
         }
     }
 
@@ -317,6 +362,93 @@ struct HomeView: View {
             }
         }
         .accessibilityLabel(session.unreadNotifications > 0 ? "通知，\(session.unreadNotifications) 条未读" : "通知")
+    }
+
+    private var examCalendarCarousel: some View {
+        let followed = calendarSummary?.followedHighlights ?? []
+        return NavigationLink {
+            ExamCalendarView()
+        } label: {
+            TijingPaperCard(tint: TijingDesign.butter, rotation: -0.15) {
+                HStack(spacing: 13) {
+                    TijingStickerIcon(
+                        systemImage: followed.isEmpty ? "calendar.badge.clock" : "star.fill",
+                        tint: TijingDesign.amber,
+                        background: TijingDesign.butter,
+                        size: 46,
+                        rotation: -6,
+                        sparkle: !followed.isEmpty
+                    )
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 7) {
+                            Text("考试日历").font(.headline)
+                            if !followed.isEmpty {
+                                Text("关注 \(followed.count)")
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(TijingDesign.amber)
+                            }
+                        }
+
+                        if let item = carouselExam(from: followed) {
+                            Text(shortExamTitle(item.title))
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+                                .contentTransition(.opacity)
+                            Text(carouselCountdown(item))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .contentTransition(.numericText())
+                        } else {
+                            Text(calendarSubtitle)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                        }
+                    }
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.bold())
+                        .foregroundStyle(.tertiary)
+                }
+            }
+        }
+        .buttonStyle(TijingPressableCardStyle())
+        .tijingTactileLink()
+        .task(id: followed.map(\.id)) {
+            guard followed.count > 1 else { calendarCarouselIndex = 0; return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(4.2))
+                guard !Task.isCancelled else { break }
+                await MainActor.run {
+                    withAnimation(.spring(response: 0.45, dampingFraction: 0.86)) {
+                        calendarCarouselIndex = (calendarCarouselIndex + 1) % followed.count
+                    }
+                }
+            }
+        }
+    }
+
+    private func carouselExam(from items: [RecruitmentExam]) -> RecruitmentExam? {
+        guard !items.isEmpty else { return nil }
+        return items[min(calendarCarouselIndex, items.count - 1)]
+    }
+
+    private func shortExamTitle(_ title: String) -> String {
+        title
+            .replacingOccurrences(of: "关于", with: "")
+            .replacingOccurrences(of: "公告", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func carouselCountdown(_ exam: RecruitmentExam) -> String {
+        let place = exam.city.flatMap { $0.isEmpty ? nil : $0 } ?? "四川"
+        let node = exam.nextLabel ?? "查看节点"
+        if let days = exam.daysToNext {
+            return "\(place) · \(node) · \(days == 0 ? "今天" : "还有 \(days) 天")"
+        }
+        return "\(place) · \(node)"
     }
 
     private var homeSummary: String {

@@ -69,9 +69,11 @@ struct ExamCalendarSummary: Decodable {
     let activeCount: Int
     let nextExam: RecruitmentExam?
     let highlights: [RecruitmentExam]
+    let followedHighlights: [RecruitmentExam]?
 
     enum CodingKeys: String, CodingKey {
         case highlights
+        case followedHighlights = "followed_highlights"
         case followedCount = "followed_count"
         case activeCount = "active_count"
         case nextExam = "next_exam"

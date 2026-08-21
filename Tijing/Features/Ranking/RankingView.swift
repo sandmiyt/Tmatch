@@ -85,32 +85,49 @@ struct RankingView: View {
     }
 
     private func seasonHero(_ season: SeasonPublicInfo) -> some View {
-        TijingHeroCard(
-            gradient: LinearGradient(
-                colors: [Color(red: 0.13, green: 0.15, blue: 0.30), TijingDesign.indigo, TijingDesign.violet],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        ) {
-            HStack(alignment: .top, spacing: 16) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Label(season.label, systemImage: "crown.fill")
-                        .font(.headline)
-                        .foregroundStyle(.white.opacity(0.82))
-                    Text(season.daysLeft > 0 ? "\(season.daysLeft) 天后结算" : "新赛季即将开启")
-                        .font(.system(.title, design: .rounded, weight: .bold))
-                    Text("每月 1 日结算，新的赛季从上一季最终段位继续出发。")
+        let days = max(0, season.daysLeft)
+        return TijingPaperCard(tint: TijingDesign.lilac, rotation: -0.18) {
+            HStack(alignment: .center, spacing: 16) {
+                ZStack {
+                    Circle()
+                        .fill(TijingDesign.violet.opacity(0.12))
+                        .frame(width: 72, height: 72)
+                    Circle()
+                        .trim(from: 0, to: min(1, max(0.06, CGFloat(31 - min(days, 31)) / 31)))
+                        .stroke(TijingDesign.violet, style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .frame(width: 62, height: 62)
+                    VStack(spacing: -1) {
+                        Text("\(days)")
+                            .font(.system(.title2, design: .rounded, weight: .bold))
+                            .monospacedDigit()
+                            .contentTransition(.numericText())
+                        Text("天")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 7) {
+                        TijingMicroBadge(title: "赛季结算", systemImage: "calendar.badge.clock", tint: TijingDesign.violet)
+                        Text(season.label)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(days > 0 ? "这一季还没写完" : "新赛季准备开始")
+                        .font(.system(.title3, design: .rounded, weight: .bold))
+                    Text(days > 0 ? "把最后几场打漂亮，结算时会生成你的赛季名片。" : "结算完成后会从上一季最终段位继承新的起点。")
                         .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.72))
+                        .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                Spacer(minLength: 8)
-                Image(systemName: "trophy.fill")
-                    .font(.system(size: 38, weight: .semibold))
+                Spacer(minLength: 4)
+                Image(systemName: "sparkles")
+                    .font(.title2.weight(.semibold))
                     .foregroundStyle(TijingDesign.amber)
-                    .symbolRenderingMode(.hierarchical)
+                    .symbolEffect(.pulse, options: .repeat(2))
             }
-            .foregroundStyle(.white)
         }
     }
 
@@ -167,7 +184,7 @@ struct RankingView: View {
             LazyVGrid(columns: dynamicTypeSize.isAccessibilitySize ? [GridItem(.flexible())] : [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                 TijingMetricTile(value: "\(current.peakRating)", title: "赛季最高", systemImage: "arrow.up.right", tint: TijingDesign.mint)
                 TijingMetricTile(value: "\(current.wins)胜 \(current.losses)负", title: "本季战绩", systemImage: "bolt.fill", tint: TijingDesign.indigo)
-                TijingMetricTile(value: "\(current.achievementCount)/\(current.achievementTotal)", title: "赛季成就", systemImage: "sparkles", tint: TijingDesign.amber)
+                TijingMetricTile(value: "\(current.achievementCount)/\(current.achievementTotal)", title: "赛季成就", systemImage: "medal.fill", tint: TijingDesign.amber)
             }
 
             HStack(spacing: 10) {
@@ -175,7 +192,7 @@ struct RankingView: View {
                     Haptics.light()
                     seasonPanel = .achievements
                 } label: {
-                    Label("赛季成就", systemImage: "sparkles")
+                    Label("赛季成就", systemImage: "medal.fill")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
@@ -394,40 +411,25 @@ private struct SeasonAchievementsView: View {
                 if let current {
                     ScrollView {
                         VStack(spacing: 16) {
-                            TijingPaperCard(tint: TijingDesign.butter, rotation: -0.25) {
-                                HStack(spacing: 13) {
-                                    TijingStickerIcon(systemImage: "sparkles", tint: TijingDesign.amber, background: TijingDesign.butter, size: 50, rotation: -7)
-                                    VStack(alignment: .leading, spacing: 3) {
-                                        Text("本赛季成就")
-                                            .font(.headline)
-                                        Text("已解锁 \(current.achievementCount) / \(current.achievementTotal)")
-                                            .font(.subheadline)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    Spacer(minLength: 0)
-                                }
-                            }
+                            achievementOverview(current)
 
                             if current.achievements.isEmpty {
                                 TijingPaperCard(tint: TijingDesign.sky) {
-                                    Text("完成第一场排位后，赛季成就会从这里开始亮起来。")
-                                        .font(.subheadline)
-                                        .foregroundStyle(.secondary)
+                                    HStack(spacing: 12) {
+                                        SeasonAchievementMedallion(key: "locked", title: "待解锁", size: 48)
+                                        VStack(alignment: .leading, spacing: 3) {
+                                            Text("第一枚成就正在等你")
+                                                .font(.headline)
+                                            Text("完成第一场排位后，这里会开始收集属于你的赛季印记。")
+                                                .font(.subheadline)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    }
                                 }
                             } else {
-                                ForEach(Array(current.achievements.enumerated()), id: \.element.id) { index, achievement in
-                                    TijingPaperCard(tint: achievementTint(index)) {
-                                        HStack(alignment: .top, spacing: 12) {
-                                            Text(achievement.icon)
-                                                .font(.system(size: 26))
-                                                .frame(width: 42, height: 42)
-                                                .background(.white.opacity(0.52), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-                                            VStack(alignment: .leading, spacing: 4) {
-                                                Text(achievement.title).font(.headline)
-                                                Text(achievement.description).font(.subheadline).foregroundStyle(.secondary)
-                                            }
-                                            Spacer(minLength: 0)
-                                        }
+                                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                                    ForEach(current.achievements) { achievement in
+                                        achievementCard(achievement)
                                     }
                                 }
                             }
@@ -446,8 +448,92 @@ private struct SeasonAchievementsView: View {
         }
     }
 
-    private func achievementTint(_ index: Int) -> Color {
-        [TijingDesign.sky, TijingDesign.sage, TijingDesign.butter, TijingDesign.lilac, TijingDesign.peach][index % 5]
+    private func achievementOverview(_ current: CurrentSeasonProgress) -> some View {
+        TijingPaperCard(tint: TijingDesign.butter, rotation: -0.20) {
+            HStack(spacing: 14) {
+                ZStack {
+                    SeasonAchievementMedallion(key: "collection", title: "赛季成就", size: 58)
+                    Text("\(current.achievementCount)")
+                        .font(.caption2.bold())
+                        .foregroundStyle(.white)
+                        .padding(5)
+                        .background(TijingDesign.indigo, in: Circle())
+                        .offset(x: 23, y: -23)
+                }
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("赛季收藏册")
+                        .font(.system(.title3, design: .rounded, weight: .bold))
+                    Text("已点亮 \(current.achievementCount) / \(current.achievementTotal)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    ProgressView(value: Double(current.achievementCount), total: Double(max(1, current.achievementTotal)))
+                        .tint(TijingDesign.amber)
+                }
+            }
+        }
+    }
+
+    private func achievementCard(_ achievement: SeasonAchievement) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                SeasonAchievementMedallion(key: achievement.key, title: achievement.title, size: 50)
+                Spacer()
+                Image(systemName: "checkmark.seal.fill")
+                    .foregroundStyle(TijingDesign.mint)
+                    .font(.subheadline)
+            }
+            Text(achievement.title)
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
+            Text(achievement.description)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(3)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 150, alignment: .topLeading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.055))
+        }
+        .buttonStyle(TijingPressableCardStyle())
+    }
+}
+
+private struct SeasonAchievementMedallion: View {
+    let key: String
+    let title: String
+    var size: CGFloat = 52
+
+    private var visual: (String, Color, Color) {
+        let token = (key + " " + title).lowercased()
+        if token.contains("streak") || title.contains("连") { return ("flame.fill", TijingDesign.coral, TijingDesign.peach) }
+        if token.contains("speed") || title.contains("速度") { return ("bolt.fill", TijingDesign.amber, TijingDesign.butter) }
+        if token.contains("perfect") || title.contains("十全") { return ("star.fill", TijingDesign.amber, TijingDesign.butter) }
+        if token.contains("turnaround") || title.contains("翻盘") || title.contains("反杀") { return ("arrow.up.right.circle.fill", TijingDesign.mint, TijingDesign.sage) }
+        if token.contains("clutch") || token.contains("match_point") || title.contains("关键") || title.contains("大心脏") { return ("heart.fill", TijingDesign.coral, TijingDesign.peach) }
+        if token.contains("first") { return ("flag.fill", TijingDesign.indigo, TijingDesign.sky) }
+        if token.contains("win") || title.contains("胜") { return ("trophy.fill", TijingDesign.amber, TijingDesign.butter) }
+        if token.contains("correct") || title.contains("题斩") { return ("checkmark.circle.fill", TijingDesign.mint, TijingDesign.sage) }
+        if token.contains("days") || title.contains("七日") { return ("calendar.badge.checkmark", TijingDesign.violet, TijingDesign.lilac) }
+        if key == "locked" { return ("lock.fill", .secondary, TijingDesign.sky) }
+        return ("medal.fill", TijingDesign.violet, TijingDesign.lilac)
+    }
+
+    var body: some View {
+        let visual = visual
+        ZStack {
+            Circle().fill(visual.2)
+            Circle().strokeBorder(visual.1.opacity(0.18), lineWidth: 1)
+            Image(systemName: visual.0)
+                .font(.system(size: size * 0.38, weight: .bold))
+                .foregroundStyle(visual.1)
+                .symbolRenderingMode(.hierarchical)
+        }
+        .frame(width: size, height: size)
+        .shadow(color: visual.1.opacity(0.10), radius: 8, y: 4)
     }
 }
 
