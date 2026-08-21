@@ -13,6 +13,7 @@ struct BattleLobbyView: View {
     @State private var subject = ""
     @State private var topic = ""
     @State private var catalogLoading = true
+    @State private var lastMatchStage = "exact"
 
     private var selectedSubject: PracticeSubject? { catalog.first { $0.name == subject } }
     private var scopeLabel: String { topic.isEmpty ? (subject.isEmpty ? "全部题库" : subject) : "\(subject) · \(topic)" }
@@ -31,11 +32,16 @@ struct BattleLobbyView: View {
                             .foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .tijingReveal(order: 0)
 
                     rankedHero
+                        .tijingReveal(order: 1)
                     scopeCard
+                        .tijingReveal(order: 2)
                     secondaryModes
+                        .tijingReveal(order: 3)
                     joinRoomCard
+                        .tijingReveal(order: 4)
 
                     if let error {
                         Label(error, systemImage: "exclamationmark.triangle.fill")
@@ -87,20 +93,30 @@ struct BattleLobbyView: View {
                             .monospacedDigit()
                     }
                     Spacer(minLength: 12)
-                    Image(systemName: matching ? "dot.radiowaves.left.and.right" : "trophy.fill")
-                        .font(.system(size: 34, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.92))
+                    if matching {
+                        TijingMatchmakingPulse()
+                            .transition(.scale(scale: 0.84).combined(with: .opacity))
+                    } else {
+                        Image(systemName: "trophy.fill")
+                            .font(.system(size: 34, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.92))
+                            .transition(.scale(scale: 0.86).combined(with: .opacity))
+                    }
                 }
 
                 if matching {
                     VStack(alignment: .leading, spacing: 12) {
-                        HStack(spacing: 10) {
-                            ProgressView()
-                                .tint(.white)
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: "sparkles")
+                                .font(.subheadline.bold())
+                                .foregroundStyle(.white.opacity(0.82))
+                                .padding(.top, 2)
                             Text(matchStatus.isEmpty ? "正在匹配对手…" : matchStatus)
                                 .font(.subheadline.weight(.medium))
                                 .foregroundStyle(.white.opacity(0.88))
                                 .fixedSize(horizontal: false, vertical: true)
+                                .id(matchStatus)
+                                .transition(.opacity.combined(with: .move(edge: .bottom)))
                         }
 
                         Button(role: .destructive) {
@@ -134,6 +150,8 @@ struct BattleLobbyView: View {
                 }
             }
             .foregroundStyle(.white)
+            .animation(.spring(response: 0.52, dampingFraction: 0.84), value: matching)
+            .animation(.easeInOut(duration: 0.28), value: matchStatus)
         }
     }
 
@@ -293,6 +311,7 @@ struct BattleLobbyView: View {
         Haptics.medium()
         matching = true
         error = nil
+        lastMatchStage = "exact"
         matchStatus = "正在寻找 \(scopeLabel) · 排位赛对手…" + (topic.isEmpty ? "" : "\n（60秒未匹配将自动扩大到本题库全部章节）")
         matchTask = Task { await matchLoop() }
     }
@@ -301,6 +320,7 @@ struct BattleLobbyView: View {
         matching = false
         matchTask?.cancel(); matchTask = nil
         matchStatus = ""
+        lastMatchStage = "exact"
         guard let token = session.token else { return }
         Task { let _: EmptyResponse? = try? await session.api.request("/api/matchmaking/cancel", method: .post, body: EmptyBody(), token: token) }
         Haptics.selection()
@@ -327,7 +347,12 @@ struct BattleLobbyView: View {
                     return
                 }
                 let waited = response.waitSeconds ?? 0
-                switch response.matchStage {
+                let nextStage = response.matchStage ?? "exact"
+                if nextStage != lastMatchStage {
+                    lastMatchStage = nextStage
+                    Haptics.rigid()
+                }
+                switch nextStage {
                 case "all":
                     matchStatus = "已等待 \(waited) 秒，已扩大到全部题库继续寻找对手…"
                 case "subject":

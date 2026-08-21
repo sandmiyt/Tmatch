@@ -19,15 +19,9 @@ struct NotificationsView: View {
                     ContentUnavailableView("暂无通知", systemImage: "bell.slash", description: Text(error ?? "新的好友、对战和系统消息会出现在这里"))
                 } else {
                     List {
-                        Section {
-                            notificationHeader
-                                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 10, trailing: 16))
-                                .listRowSeparator(.hidden)
-                                .listRowBackground(Color.clear)
-                        }
-
-                        ForEach(items) { item in
+                        ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                             notificationCard(item)
+                                .tijingReveal(order: min(index, 8))
                                 .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                                 .listRowSeparator(.hidden)
                                 .listRowBackground(Color.clear)
@@ -38,11 +32,13 @@ struct NotificationsView: View {
                                 }
                                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                     Button("删除", role: .destructive) { delete(item) }
+                                        .tint(.red)
                                 }
                         }
                     }
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
+                    .animation(.spring(response: 0.40, dampingFraction: 0.86), value: items.map(\.id))
                 }
             }
         }
@@ -71,23 +67,6 @@ struct NotificationsView: View {
         }
         .confirmationDialog("清空全部通知？", isPresented: $confirmDeleteAll) {
             Button("清空", role: .destructive) { deleteAll() }
-        }
-    }
-
-    private var notificationHeader: some View {
-        TijingPaperCard(tint: TijingDesign.lilac, rotation: -0.25) {
-            HStack(spacing: 13) {
-                TijingStickerIcon(systemImage: "bell.badge.fill", tint: TijingDesign.violet, background: TijingDesign.lilac, size: 48, rotation: -7)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("消息收纳盒")
-                        .font(.headline)
-                    Text("挑战、好友和系统消息都在这里。左滑删除，右滑可快速标为已读。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: 0)
-            }
         }
     }
 

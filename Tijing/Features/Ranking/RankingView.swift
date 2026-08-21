@@ -33,17 +33,21 @@ struct RankingView: View {
 
                         if let season = seasonInfo ?? seasonMe?.season {
                             seasonHero(season)
+                                .tijingReveal(order: 1)
                         }
 
                         if !items.isEmpty {
                             podiumSection
+                                .tijingReveal(order: 2)
                         }
 
                         if let current = seasonMe?.current {
                             mySeasonSection(current)
+                                .tijingReveal(order: 3)
                         }
 
                         rankingListSection
+                            .tijingReveal(order: 4)
 
                         if let error {
                             Label(error, systemImage: "wifi.exclamationmark")
@@ -153,6 +157,8 @@ struct RankingView: View {
                 Text("\(current.rating)")
                     .font(.system(.title2, design: .rounded, weight: .bold))
                     .monospacedDigit()
+                    .contentTransition(.numericText())
+                    .animation(.snappy(duration: 0.38), value: current.rating)
                 Text("竞点")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -227,10 +233,12 @@ struct RankingView: View {
         HStack(spacing: 12) {
             Text("\(user.position ?? 0)")
                 .font(.headline.monospacedDigit())
+                .contentTransition(.numericText())
+                .animation(.snappy(duration: 0.34), value: user.position)
                 .foregroundStyle(.secondary)
                 .frame(width: 34)
 
-            RemoteAvatar(urlString: user.avatarURL, name: user.nickname, size: 42)
+            TijingInteractiveAvatar(urlString: user.avatarURL, name: user.nickname, size: 42)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(user.nickname)
@@ -248,6 +256,8 @@ struct RankingView: View {
                 Text("\(user.rating)")
                     .font(.headline.monospacedDigit())
                     .foregroundStyle(.primary)
+                    .contentTransition(.numericText())
+                    .animation(.snappy(duration: 0.34), value: user.rating)
                 Text("竞点")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -307,7 +317,7 @@ private struct SeasonPodiumCard: View {
     var body: some View {
         VStack(spacing: 9) {
             ZStack(alignment: .topTrailing) {
-                RemoteAvatar(urlString: user.avatarURL, name: user.nickname, size: place == 1 ? 68 : 56)
+                TijingInteractiveAvatar(urlString: user.avatarURL, name: user.nickname, size: place == 1 ? 68 : 56)
                     .overlay {
                         Circle().stroke(tint.opacity(0.80), lineWidth: place == 1 ? 3 : 2)
                     }
@@ -327,6 +337,8 @@ private struct SeasonPodiumCard: View {
             Text("\(user.rating)")
                 .font(.system(place == 1 ? .title2 : .headline, design: .rounded, weight: .bold))
                 .monospacedDigit()
+                .contentTransition(.numericText())
+                .animation(.snappy(duration: 0.34), value: user.rating)
             Text(place == 1 ? "赛季之巅" : (place == 2 ? "一人之下" : "稳居前三"))
                 .font(.caption2)
                 .foregroundStyle(.secondary)

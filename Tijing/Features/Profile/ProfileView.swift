@@ -20,12 +20,19 @@ struct ProfileView: View {
                 ScrollView {
                     LazyVStack(spacing: 25) {
                         header
+                            .tijingReveal(order: 0)
                         identityCard(user)
+                            .tijingReveal(order: 1)
                         statusStamps(user)
+                            .tijingReveal(order: 2)
                         activitySection
+                            .tijingReveal(order: 3)
                         accountSection
+                            .tijingReveal(order: 4)
                         supportSection
+                            .tijingReveal(order: 5)
                         logoutButton
+                            .tijingReveal(order: 6)
                     }
                     .padding(.horizontal, TijingDesign.pageHorizontalPadding)
                     .padding(.top, 8)
@@ -139,6 +146,8 @@ struct ProfileView: View {
             Text(value)
                 .font(.system(.headline, design: .rounded, weight: .bold))
                 .monospacedDigit()
+                .contentTransition(.numericText())
+                .animation(.snappy(duration: 0.36), value: value)
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
             Text(label)
@@ -166,6 +175,8 @@ struct ProfileView: View {
                 Text(value)
                     .font(.system(.title3, design: .rounded, weight: .bold))
                     .monospacedDigit()
+                    .contentTransition(.numericText())
+                    .animation(.snappy(duration: 0.36), value: value)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
                 Text(label)
@@ -250,7 +261,7 @@ struct ProfileView: View {
                     } label: {
                         Text("登录 / 注册")
                             .font(.headline)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(Color(uiColor: .systemBackground))
                             .padding(.horizontal, 18)
                             .padding(.vertical, 11)
                             .background(TijingDesign.ink, in: Capsule())

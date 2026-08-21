@@ -21,11 +21,17 @@ struct LearningView: View {
                 ScrollView {
                     LazyVStack(spacing: 26) {
                         header
+                            .tijingReveal(order: 0)
                         snapshotCard(diagnostics)
+                            .tijingReveal(order: 1)
                         focusNote(diagnostics)
+                            .tijingReveal(order: 2)
                         actionDeck(diagnostics)
+                            .tijingReveal(order: 3)
                         insightStrip(diagnostics)
+                            .tijingReveal(order: 4)
                         subjectSection(diagnostics)
+                            .tijingReveal(order: 5)
                         if let error {
                             Label(error, systemImage: "wifi.exclamationmark")
                                 .font(.footnote)
@@ -81,6 +87,7 @@ struct LearningView: View {
                             .font(.system(size: 56, weight: .bold, design: .rounded))
                             .monospacedDigit()
                             .contentTransition(.numericText())
+                            .animation(.snappy(duration: 0.38), value: data.overview.sevenDayAccuracy)
                         Text("正确率 · \(data.overview.sevenDayTotal) 题")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)

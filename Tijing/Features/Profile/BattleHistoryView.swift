@@ -14,13 +14,7 @@ struct BattleHistoryView: View {
                 ContentUnavailableView("暂无排位战绩", systemImage: "clock.arrow.circlepath", description: Text(error ?? "完成排位对战后会出现在这里"))
             } else {
                 List {
-                    Section {
-                        historyHeader
-                            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 10, trailing: 16))
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.clear)
-                    }
-                    ForEach(items) { item in
+                    ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                     NavigationLink {
                         BattleHistoryDetailView(recordID: item.id)
                     } label: {
@@ -55,10 +49,12 @@ struct BattleHistoryView: View {
                         .padding(.vertical, 6)
                     }
                     .listRowBackground(Color.clear)
+                    .tijingReveal(order: min(index, 8))
                 }
                 }
                 .scrollContentBackground(.hidden)
                 .background(TijingPageBackground())
+                .animation(.spring(response: 0.40, dampingFraction: 0.86), value: items.map(\.id))
             }
         }
         .navigationTitle("排位战绩")
@@ -66,22 +62,6 @@ struct BattleHistoryView: View {
         .task { await load() }
     }
 
-
-    private var historyHeader: some View {
-        TijingPaperCard(tint: TijingDesign.lilac, rotation: -0.2) {
-            HStack(spacing: 13) {
-                TijingStickerIcon(systemImage: "clock.arrow.circlepath", tint: TijingDesign.violet, background: TijingDesign.lilac, size: 48, rotation: -6)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("最近的对局")
-                        .font(.headline)
-                    Text("点进每一场可以继续看逐题复盘、收藏和纠错。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 0)
-            }
-        }
-    }
 
     @MainActor private func load() async {
         guard let token = session.token else { return }

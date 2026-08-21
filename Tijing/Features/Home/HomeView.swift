@@ -23,14 +23,20 @@ struct HomeView: View {
             ScrollView {
                 LazyVStack(spacing: TijingDesign.sectionSpacing) {
                     pageHeader
+                        .tijingReveal(order: 0)
 
                     if session.isAuthenticated {
                         continueHero
+                            .tijingReveal(order: 1)
                         todaySection
+                            .tijingReveal(order: 2)
                         pulseSection
+                            .tijingReveal(order: 3)
                         utilitySection
+                            .tijingReveal(order: 4)
                     } else {
                         signInHero
+                            .tijingReveal(order: 1)
                     }
 
                     if let loadError {
@@ -73,9 +79,6 @@ struct HomeView: View {
 
     private var pageHeader: some View {
         VStack(alignment: .leading, spacing: 7) {
-            Text(session.user.map { greeting(for: $0.nickname) } ?? "你好")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
             Text("上岸之前，先上分。")
                 .font(.system(.largeTitle, design: .rounded, weight: .heavy))
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
@@ -169,9 +172,9 @@ struct HomeView: View {
                     LearningView()
                 } label: {
                     TijingActionTile(
-                        title: "智能训练",
-                        subtitle: dailyPlanSubtitle,
-                        systemImage: "scope",
+                        title: "学习诊断",
+                        subtitle: "查看近期正确率、速度与训练重点",
+                        systemImage: "chart.xyaxis.line",
                         tint: TijingDesign.violet
                     )
                 }
@@ -362,12 +365,6 @@ struct HomeView: View {
             return "\(place) · \(node) · \(days == 0 ? "就是今天" : "还有 \(days) 天")"
         }
         return "\(place) · \(node)"
-    }
-
-    private func greeting(for name: String) -> String {
-        let hour = Calendar.current.component(.hour, from: Date())
-        let prefix = hour < 11 ? "早上好" : (hour < 18 ? "下午好" : "晚上好")
-        return "\(prefix)，\(name)"
     }
 
     @MainActor

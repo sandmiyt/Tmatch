@@ -10,7 +10,7 @@ enum TijingDesign {
     static let cardRadius: CGFloat = 26
     static let compactRadius: CGFloat = 18
 
-    static let ink = Color(red: 0.12, green: 0.15, blue: 0.20)
+    static let ink = Color(uiColor: .label)
     static let indigo = Color(red: 0.35, green: 0.39, blue: 0.86)
     static let violet = Color(red: 0.58, green: 0.48, blue: 0.86)
     static let cyan = Color(red: 0.30, green: 0.69, blue: 0.82)
@@ -32,7 +32,7 @@ enum TijingDesign {
     )
 
     static let battleGradient = LinearGradient(
-        colors: [sky.opacity(0.95), lilac.opacity(0.96)],
+        colors: [indigo.opacity(0.90), violet.opacity(0.82), cyan.opacity(0.70)],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
@@ -109,6 +109,7 @@ struct TijingSectionHeading: View {
 }
 
 struct TijingHeroCard<Content: View>: View {
+    @Environment(\.colorScheme) private var colorScheme
     let gradient: LinearGradient
     private let content: Content
 
@@ -136,12 +137,13 @@ struct TijingHeroCard<Content: View>: View {
                 .padding(22)
         }
         .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
-        .shadow(color: Color.black.opacity(0.07), radius: 20, y: 10)
+        .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.20 : 0.07), radius: colorScheme == .dark ? 12 : 20, y: colorScheme == .dark ? 5 : 10)
         .accessibilityElement(children: .contain)
     }
 }
 
 struct TijingPastelCard<Content: View>: View {
+    @Environment(\.colorScheme) private var colorScheme
     let tint: Color
     var minHeight: CGFloat? = nil
     private let content: Content
@@ -155,11 +157,11 @@ struct TijingPastelCard<Content: View>: View {
     var body: some View {
         ZStack(alignment: .topTrailing) {
             RoundedRectangle(cornerRadius: TijingDesign.cardRadius, style: .continuous)
-                .fill(tint.opacity(0.42))
+                .fill(tint.opacity(colorScheme == .dark ? 0.16 : 0.42))
             TijingDotGrid(opacity: 0.045)
                 .clipShape(RoundedRectangle(cornerRadius: TijingDesign.cardRadius, style: .continuous))
             Circle()
-                .fill(.white.opacity(0.28))
+                .fill((colorScheme == .dark ? Color.white.opacity(0.05) : Color.white.opacity(0.28)))
                 .frame(width: 88, height: 88)
                 .offset(x: 24, y: -28)
             content
@@ -192,6 +194,7 @@ struct TijingMetricTile: View {
                 .font(.system(.title2, design: .rounded, weight: .bold))
                 .monospacedDigit()
                 .contentTransition(.numericText())
+                .animation(.snappy(duration: 0.38), value: value)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
 
@@ -220,6 +223,8 @@ struct TijingCompactMetric: View {
             Text(value)
                 .font(.system(.title3, design: .rounded, weight: .bold))
                 .monospacedDigit()
+                .contentTransition(.numericText())
+                .animation(.snappy(duration: 0.38), value: value)
                 .foregroundStyle(tint)
             Text(label)
                 .font(.caption2)
@@ -413,6 +418,8 @@ struct TijingProgressRing: View {
                 Text(value)
                     .font(.system(.title2, design: .rounded, weight: .bold))
                     .monospacedDigit()
+                    .contentTransition(.numericText())
+                    .animation(.snappy(duration: 0.38), value: value)
                 Text(caption)
                     .font(.caption2.weight(.medium))
                     .foregroundStyle(.white.opacity(0.76))
@@ -432,18 +439,18 @@ struct TijingPrimaryButtonStyle: ButtonStyle {
             .padding(.vertical, 15)
             .background(TijingDesign.primaryGradient)
             .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
-            .scaleEffect(configuration.isPressed ? 0.975 : 1)
-            .opacity(configuration.isPressed ? 0.92 : 1)
-            .animation(.easeOut(duration: 0.14), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? 0.972 : 1)
+            .opacity(configuration.isPressed ? 0.93 : 1)
+            .animation(.spring(response: 0.26, dampingFraction: 0.78), value: configuration.isPressed)
     }
 }
 
 struct TijingPressableCardStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.985 : 1)
-            .opacity(configuration.isPressed ? 0.94 : 1)
-            .animation(.easeOut(duration: 0.13), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? 0.978 : 1)
+            .opacity(configuration.isPressed ? 0.95 : 1)
+            .animation(.spring(response: 0.26, dampingFraction: 0.80), value: configuration.isPressed)
     }
 }
 
@@ -467,6 +474,7 @@ extension View {
 // modern learning apps. They stay decorative; all primary interaction remains
 // native SwiftUI controls.
 struct TijingStickerIcon: View {
+    @Environment(\.colorScheme) private var colorScheme
     let systemImage: String
     var tint: Color = TijingDesign.indigo
     var background: Color = TijingDesign.butter
@@ -477,10 +485,10 @@ struct TijingStickerIcon: View {
     var body: some View {
         ZStack(alignment: .topTrailing) {
             RoundedRectangle(cornerRadius: size * 0.30, style: .continuous)
-                .fill(background.opacity(0.92))
+                .fill(background.opacity(colorScheme == .dark ? 0.42 : 0.92))
                 .frame(width: size, height: size)
                 .rotationEffect(.degrees(rotation))
-                .shadow(color: Color.black.opacity(0.05), radius: 8, y: 4)
+                .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.16 : 0.05), radius: 8, y: 4)
 
             Image(systemName: systemImage)
                 .font(.system(size: size * 0.38, weight: .semibold))
@@ -501,6 +509,7 @@ struct TijingStickerIcon: View {
 }
 
 struct TijingPaperCard<Content: View>: View {
+    @Environment(\.colorScheme) private var colorScheme
     var tint: Color = TijingDesign.sky
     var rotation: Double = 0
     private let content: Content
@@ -516,12 +525,12 @@ struct TijingPaperCard<Content: View>: View {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .fill(Color(uiColor: .secondarySystemGroupedBackground))
             LinearGradient(
-                colors: [tint.opacity(0.20), tint.opacity(0.04), .clear],
+                colors: [tint.opacity(colorScheme == .dark ? 0.10 : 0.20), tint.opacity(colorScheme == .dark ? 0.025 : 0.04), .clear],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
             Circle()
-                .fill(tint.opacity(0.22))
+                .fill(tint.opacity(colorScheme == .dark ? 0.10 : 0.22))
                 .frame(width: 58, height: 58)
                 .offset(x: 22, y: -26)
             content
@@ -533,7 +542,7 @@ struct TijingPaperCard<Content: View>: View {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.05))
         }
-        .shadow(color: Color.black.opacity(0.045), radius: 14, y: 8)
+        .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.16 : 0.045), radius: colorScheme == .dark ? 9 : 14, y: colorScheme == .dark ? 4 : 8)
         .rotationEffect(.degrees(rotation))
     }
 }
@@ -573,6 +582,8 @@ struct TijingMiniStatRow: View {
             Text(value)
                 .font(.subheadline.weight(.semibold))
                 .monospacedDigit()
+                .contentTransition(.numericText())
+                .animation(.snappy(duration: 0.34), value: value)
         }
     }
 }
@@ -591,5 +602,97 @@ struct TijingFloatingSparkles: View {
         }
         .foregroundStyle(tint.opacity(0.80))
         .accessibilityHidden(true)
+    }
+}
+
+
+// MARK: - Motion and tactile polish
+private struct TijingRevealModifier: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let order: Int
+    @State private var revealed = false
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(revealed ? 1 : 0)
+            .offset(y: revealed || reduceMotion ? 0 : 10)
+            .scaleEffect(revealed || reduceMotion ? 1 : 0.985)
+            .onAppear {
+                guard !revealed else { return }
+                if reduceMotion {
+                    revealed = true
+                } else {
+                    withAnimation(.spring(response: 0.48, dampingFraction: 0.84).delay(Double(order) * 0.045)) {
+                        revealed = true
+                    }
+                }
+            }
+    }
+}
+
+extension View {
+    func tijingReveal(order: Int = 0) -> some View {
+        modifier(TijingRevealModifier(order: order))
+    }
+}
+
+struct TijingInteractiveAvatar: View {
+    let urlString: String?
+    let name: String
+    var size: CGFloat = 46
+    @GestureState private var pressed = false
+
+    var body: some View {
+        RemoteAvatar(urlString: urlString, name: name, size: size)
+            .scaleEffect(pressed ? 0.92 : 1)
+            .shadow(color: Color.black.opacity(pressed ? 0.03 : 0.07), radius: pressed ? 2 : 7, y: pressed ? 1 : 3)
+            .animation(.spring(response: 0.24, dampingFraction: 0.72), value: pressed)
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 0)
+                    .updating($pressed) { _, state, _ in state = true }
+            )
+    }
+}
+
+struct TijingMatchmakingPulse: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    var tint: Color = .white
+
+    var body: some View {
+        TimelineView(AnimationTimelineSchedule(minimumInterval: reduceMotion ? 1 : 1.0 / 30.0, paused: reduceMotion)) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            ZStack {
+                ForEach(0..<3, id: \.self) { index in
+                    let phase = (t * 0.42 + Double(index) * 0.27).truncatingRemainder(dividingBy: 1)
+                    Circle()
+                        .stroke(tint.opacity(0.28 * (1 - phase)), lineWidth: 1.5)
+                        .frame(width: 28 + CGFloat(phase) * 58, height: 28 + CGFloat(phase) * 58)
+                }
+
+                Circle()
+                    .fill(tint.opacity(0.12))
+                    .frame(width: 42, height: 42)
+
+                Image(systemName: "person.2.fill")
+                    .font(.system(size: 17, weight: .semibold))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(tint)
+
+                if !reduceMotion {
+                    orbitDot(angle: t * 2.0, radius: 33, size: 6)
+                    orbitDot(angle: -t * 1.45 + 2.1, radius: 25, size: 5)
+                }
+            }
+            .frame(width: 96, height: 96)
+        }
+        .accessibilityHidden(true)
+    }
+
+    private func orbitDot(angle: Double, radius: CGFloat, size: CGFloat) -> some View {
+        Circle()
+            .fill(tint)
+            .frame(width: size, height: size)
+            .offset(x: CGFloat(cos(angle)) * radius, y: CGFloat(sin(angle)) * radius)
+            .shadow(color: tint.opacity(0.35), radius: 4)
     }
 }

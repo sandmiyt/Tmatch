@@ -163,6 +163,7 @@ struct PracticeSessionView: View {
 
                 if let feedback = store.feedbackForCurrent() {
                     FeedbackCard(question: question, feedback: feedback)
+                        .tijingReveal(order: 0)
                 }
 
                 if let error = store.error {
@@ -442,7 +443,7 @@ struct QuestionCorrectionView: View {
 private struct CorrectionBody: Encodable { let category: String; let content: String }
 private struct CorrectionResponse: Decodable { let ok: Bool; let id: Int?; let duplicate: Bool? }
 
-private enum OptionVisualState { case normal, selected, correct, wrong }
+private enum OptionVisualState: Equatable { case normal, selected, correct, wrong }
 
 private struct OptionRow: View {
     let letter: String
@@ -473,6 +474,17 @@ private struct OptionRow: View {
         .background(background, in: RoundedRectangle(cornerRadius: 19, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 19).stroke(border, lineWidth: state == .normal ? 0.7 : 1.5))
         .shadow(color: state == .normal ? Color.black.opacity(0.025) : Color.clear, radius: 7, y: 3)
+        .overlay(alignment: .topTrailing) {
+            if state == .correct || state == .wrong {
+                Image(systemName: state == .correct ? "checkmark.circle.fill" : "xmark.circle.fill")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(state == .correct ? Color.green : Color.red)
+                    .padding(10)
+                    .transition(.scale(scale: 0.55).combined(with: .opacity))
+            }
+        }
+        .scaleEffect(state == .correct ? 1.012 : (state == .wrong ? 0.992 : 1))
+        .animation(.spring(response: 0.34, dampingFraction: 0.70), value: state)
         .contentShape(Rectangle())
         .onTapGesture { if !excluded { tap() } }
         .onLongPressGesture(minimumDuration: 0.45, perform: longPress)
@@ -592,6 +604,8 @@ private struct PracticeBatchResultView: View {
                                     Text("\(result.score) 分")
                                         .font(.system(size: 42, weight: .bold, design: .rounded))
                                         .monospacedDigit()
+                                        .contentTransition(.numericText())
+                                        .animation(.snappy(duration: 0.42), value: result.score)
                                     Text("\(result.correct) / \(result.total) 正确")
                                         .font(.subheadline)
                                         .foregroundStyle(.secondary)

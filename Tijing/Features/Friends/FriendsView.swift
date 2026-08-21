@@ -19,13 +19,6 @@ struct FriendsView: View {
 
     var body: some View {
         List {
-            Section {
-                friendsHeader
-                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 10, trailing: 16))
-                    .listRowSeparator(.hidden)
-                    .listRowBackground(Color.clear)
-            }
-
             if !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Section("搜索结果") {
                     if searchResults.isEmpty { Text("没有找到匹配用户").foregroundStyle(.secondary) }
@@ -119,6 +112,8 @@ struct FriendsView: View {
         }
         .scrollContentBackground(.hidden)
         .background(TijingPageBackground())
+        .animation(.spring(response: 0.40, dampingFraction: 0.86), value: friends.map(\.id))
+        .animation(.spring(response: 0.40, dampingFraction: 0.86), value: incoming.map(\.id))
         .navigationTitle("好友")
         .searchable(text: $searchText, prompt: "搜索昵称")
         .task {
@@ -150,23 +145,6 @@ struct FriendsView: View {
         }
     }
 
-
-    private var friendsHeader: some View {
-        TijingPaperCard(tint: TijingDesign.sky, rotation: -0.2) {
-            HStack(spacing: 13) {
-                TijingStickerIcon(systemImage: "person.2.fill", tint: TijingDesign.cyan, background: TijingDesign.sky, size: 50, rotation: -6)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("一起刷，也一起比")
-                        .font(.headline)
-                    Text("在线好友会自动排在前面。点头像看用户卡片，点闪电直接发起挑战。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: 0)
-            }
-        }
-    }
 
     private var sortedFriends: [FriendRelation] {
         friends.sorted { lhs, rhs in
