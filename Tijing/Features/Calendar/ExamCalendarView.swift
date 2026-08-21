@@ -120,7 +120,7 @@ struct ExamCalendarView: View {
         var query: [URLQueryItem] = []
         if city != "全部" { query.append(URLQueryItem(name: "city", value: city)) }
         if session.token != nil { query.append(URLQueryItem(name: "followed_only", value: String(followedOnly))) }
-        let owner = session.user?.id.map(String.init) ?? "public"
+        let owner = session.user.map { String($0.id) } ?? "public"
         let cacheKey = "calendar.\(owner).\(city).\(followedOnly)"
 
         if response == nil { response = session.api.cachedResponse(for: cacheKey) }

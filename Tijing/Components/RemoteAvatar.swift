@@ -116,7 +116,7 @@ private final class AvatarImageCache: @unchecked Sendable {
 
         let task: Task<UIImage?, Never> = withStateLock {
             if let existing = inFlight[url] { return existing }
-            let task = Task.detached(priority: .utility) { [directory, session] in
+            let task: Task<UIImage?, Never> = Task.detached(priority: .utility) { [directory, session] in
                 let fileURL = Self.fileURL(for: url, in: directory)
                 if let data = try? Data(contentsOf: fileURL, options: [.mappedIfSafe]),
                    let image = UIImage(data: data) {
