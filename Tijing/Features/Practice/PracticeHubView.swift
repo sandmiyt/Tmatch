@@ -64,7 +64,7 @@ struct PracticeHubView: View {
             VStack(alignment: .leading, spacing: 7) {
                 Text("刷题")
                     .font(.system(.largeTitle, design: .rounded, weight: .heavy))
-                Text("选一个题库，按自己的节奏继续练习。")
+                Text("按自己的节奏练习")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

@@ -7,11 +7,13 @@ struct RootView: View {
     @State private var selectedTab: AppTab = .home
     @State private var showingAuth = false
     @State private var presentedBattleRoom: PresentedBattleRoom?
+    @State private var showingFirstLaunchIntro = true
 
     var body: some View {
         @Bindable var bindableSession = session
 
-        TabView(selection: $selectedTab) {
+        ZStack {
+            TabView(selection: $selectedTab) {
             NavigationStack {
                 HomeView(showingAuth: $showingAuth)
             }
@@ -58,6 +60,18 @@ struct RootView: View {
             .tabItem { Label("我的", systemImage: selectedTab == .profile ? "person.crop.circle.fill" : "person.crop.circle") }
             .badge(session.unreadNotifications)
             .tag(AppTab.profile)
+            }
+            .scaleEffect(showingFirstLaunchIntro ? 1.012 : 1)
+            .opacity(showingFirstLaunchIntro ? 0.94 : 1)
+            .animation(.easeOut(duration: 0.34), value: showingFirstLaunchIntro)
+
+            if showingFirstLaunchIntro {
+                FirstLaunchIntroView {
+                    finishFirstLaunchIntro()
+                }
+                .transition(.opacity)
+                .zIndex(100)
+            }
         }
         .tint(.accentColor)
         .sensoryFeedback(.selection, trigger: selectedTab)
@@ -67,7 +81,7 @@ struct RootView: View {
                 .presentationDragIndicator(.visible)
         }
         .overlay(alignment: .top) {
-            if session.isBootstrapping && session.user == nil {
+            if !showingFirstLaunchIntro && session.isBootstrapping && session.user == nil {
                 ProgressView()
                     .padding(.horizontal, 18)
                     .padding(.vertical, 10)
@@ -112,6 +126,241 @@ struct RootView: View {
                 }
             }
         }
+    }
+
+    private func finishFirstLaunchIntro() {
+        guard showingFirstLaunchIntro else { return }
+        withAnimation(.easeOut(duration: 0.30)) {
+            showingFirstLaunchIntro = false
+        }
+    }
+}
+
+private struct FirstLaunchIntroView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
+    let onFinished: () -> Void
+
+    @State private var entered = false
+    @State private var gathered = false
+    @State private var exiting = false
+    @State private var didFinish = false
+
+    var body: some View {
+        ZStack {
+            TijingPageBackground()
+
+            RadialGradient(
+                colors: [
+                    TijingDesign.butter.opacity(colorScheme == .dark ? 0.08 : 0.28),
+                    TijingDesign.sky.opacity(colorScheme == .dark ? 0.05 : 0.16),
+                    .clear
+                ],
+                center: .center,
+                startRadius: 24,
+                endRadius: 260
+            )
+            .ignoresSafeArea()
+
+            stickerCluster
+                .scaleEffect(exiting ? 0.90 : 1)
+                .offset(y: exiting ? -16 : 0)
+                .opacity(exiting ? 0 : 1)
+
+            VStack {
+                Spacer()
+                Text("轻触即可进入")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .opacity(entered && !exiting ? 1 : 0)
+                    .padding(.bottom, 34)
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { finishNow() }
+        .task { await play() }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("题竞欢迎动画，轻触进入")
+    }
+
+    private var stickerCluster: some View {
+        ZStack {
+            sticker(
+                "checkmark.circle.fill",
+                tint: TijingDesign.mint,
+                background: TijingDesign.sage,
+                size: 50,
+                rotation: -9,
+                final: CGSize(width: -112, height: -118),
+                initial: CGSize(width: -180, height: -172)
+            )
+
+            sticker(
+                "star.fill",
+                tint: TijingDesign.amber,
+                background: TijingDesign.butter,
+                size: 45,
+                rotation: 8,
+                final: CGSize(width: 112, height: -104),
+                initial: CGSize(width: 176, height: -160)
+            )
+
+            sticker(
+                "book.pages.fill",
+                tint: TijingDesign.indigo,
+                background: TijingDesign.lilac,
+                size: 54,
+                rotation: -6,
+                final: CGSize(width: -112, height: 112),
+                initial: CGSize(width: -178, height: 166)
+            )
+
+            sticker(
+                "chart.line.uptrend.xyaxis",
+                tint: TijingDesign.cyan,
+                background: TijingDesign.sky,
+                size: 48,
+                rotation: 7,
+                final: CGSize(width: 116, height: 112),
+                initial: CGSize(width: 178, height: 168)
+            )
+
+            ZStack {
+                RoundedRectangle(cornerRadius: 34, style: .continuous)
+                    .fill(TijingDesign.peach.opacity(colorScheme == .dark ? 0.18 : 0.50))
+                    .frame(width: 204, height: 230)
+                    .rotationEffect(.degrees(entered ? -6 : -14))
+                    .offset(x: -5, y: 7)
+
+                RoundedRectangle(cornerRadius: 34, style: .continuous)
+                    .fill(TijingDesign.sky.opacity(colorScheme == .dark ? 0.16 : 0.42))
+                    .frame(width: 204, height: 230)
+                    .rotationEffect(.degrees(entered ? 5 : 12))
+                    .offset(x: 7, y: 4)
+
+                VStack(spacing: 16) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .fill(TijingDesign.primaryGradient)
+                            .frame(width: 78, height: 78)
+
+                        Image(systemName: "book.pages.fill")
+                            .font(.system(size: 31, weight: .semibold))
+                            .foregroundStyle(.white)
+
+                        Image(systemName: "sparkle")
+                            .font(.caption.bold())
+                            .foregroundStyle(.white.opacity(0.86))
+                            .offset(x: 29, y: -28)
+                    }
+
+                    VStack(spacing: 6) {
+                        Text("题竞")
+                            .font(.system(.title, design: .rounded, weight: .heavy))
+                        Text("把每一次练习都留下来")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .frame(width: 204, height: 230)
+                .background(
+                    Color(uiColor: .secondarySystemGroupedBackground),
+                    in: RoundedRectangle(cornerRadius: 34, style: .continuous)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 34, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.055))
+                }
+                .shadow(
+                    color: Color.black.opacity(colorScheme == .dark ? 0.22 : 0.08),
+                    radius: 26,
+                    y: 15
+                )
+            }
+            .scaleEffect(entered ? (gathered ? 0.97 : 1) : 0.68)
+            .rotationEffect(.degrees(entered ? 0 : -5))
+            .opacity(entered ? 1 : 0)
+        }
+        .animation(.spring(response: 0.58, dampingFraction: 0.78), value: entered)
+        .animation(.spring(response: 0.42, dampingFraction: 0.82), value: gathered)
+        .animation(.easeInOut(duration: 0.28), value: exiting)
+    }
+
+    private func sticker(
+        _ systemImage: String,
+        tint: Color,
+        background: Color,
+        size: CGFloat,
+        rotation: Double,
+        final: CGSize,
+        initial: CGSize
+    ) -> some View {
+        TijingStickerIcon(
+            systemImage: systemImage,
+            tint: tint,
+            background: background,
+            size: size,
+            rotation: rotation
+        )
+        .offset(
+            x: entered ? final.width * (gathered ? 0.93 : 1) : initial.width,
+            y: entered ? final.height * (gathered ? 0.93 : 1) : initial.height
+        )
+        .scaleEffect(entered ? 1 : 0.62)
+        .opacity(entered ? 1 : 0)
+    }
+
+    @MainActor
+    private func play() async {
+        if reduceMotion {
+            entered = true
+            try? await Task.sleep(for: .milliseconds(360))
+            finishNow()
+            return
+        }
+
+        withAnimation(.spring(response: 0.58, dampingFraction: 0.76)) {
+            entered = true
+        }
+        try? await Task.sleep(for: .milliseconds(460))
+        guard !Task.isCancelled, !didFinish else { return }
+
+        Haptics.light()
+        withAnimation(.spring(response: 0.42, dampingFraction: 0.82)) {
+            gathered = true
+        }
+        try? await Task.sleep(for: .milliseconds(360))
+        guard !Task.isCancelled, !didFinish else { return }
+
+        withAnimation(.easeInOut(duration: 0.28)) {
+            exiting = true
+        }
+        try? await Task.sleep(for: .milliseconds(220))
+        guard !Task.isCancelled, !didFinish else { return }
+        complete()
+    }
+
+    @MainActor
+    private func finishNow() {
+        guard !didFinish else { return }
+        if reduceMotion {
+            complete()
+            return
+        }
+        withAnimation(.easeOut(duration: 0.20)) {
+            exiting = true
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(150))
+            complete()
+        }
+    }
+
+    @MainActor
+    private func complete() {
+        guard !didFinish else { return }
+        didFinish = true
+        onFinished()
     }
 }
 

@@ -22,8 +22,6 @@ final class APIClient: @unchecked Sendable {
     static let shared = APIClient()
 
     let baseURL: URL
-    private let decoder: JSONDecoder
-    private let encoder: JSONEncoder
     private let session: URLSession
 
     init(baseURL: URL? = nil) {
@@ -32,8 +30,6 @@ final class APIClient: @unchecked Sendable {
         fallback.scheme = "https"
         fallback.host = "xiaocai.nat100.top"
         self.baseURL = baseURL ?? configured.flatMap(URL.init(string:)) ?? fallback.url ?? URL(fileURLWithPath: "/")
-        self.decoder = JSONDecoder()
-        self.encoder = JSONEncoder()
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 9
         config.timeoutIntervalForResource = 25
@@ -96,7 +92,7 @@ final class APIClient: @unchecked Sendable {
         query: [URLQueryItem] = [],
         headers: [String: String] = [:]
     ) async throws -> Response {
-        let data = try encoder.encode(body)
+        let data = try JSONEncoder().encode(body)
         return try await request(path, method: method, bodyData: data, token: token, query: query, headers: headers, responseCacheKey: nil)
     }
 
@@ -136,7 +132,7 @@ final class APIClient: @unchecked Sendable {
                     throw APIError(message: message, statusCode: http.statusCode, retryAfter: retryAfter)
                 }
                 do {
-                    let decoded = try decoder.decode(Response.self, from: data)
+                    let decoded = try JSONDecoder().decode(Response.self, from: data)
                     if let responseCacheKey { Self.storeCachedResponseData(data, for: responseCacheKey) }
                     return decoded
                 } catch {
@@ -179,7 +175,7 @@ final class APIClient: @unchecked Sendable {
             }
             throw APIError(message: message, statusCode: http.statusCode, retryAfter: retryAfter)
         }
-        return try decoder.decode(AvatarUploadResponse.self, from: data).user
+        return try JSONDecoder().decode(AvatarUploadResponse.self, from: data).user
     }
 
     func webSocketTask(path: String) throws -> URLSessionWebSocketTask {

@@ -47,9 +47,11 @@ final class SessionStore {
         do {
             user = try await api.request("/api/auth/me", token: token)
             persistCurrentUser()
-            try? await refreshHomeSnapshot()
-            await refreshUnreadCount()
             startRealtime()
+
+            async let homeRefresh: Void = refreshHomeSnapshotSilently()
+            async let unreadRefresh: Void = refreshUnreadCount()
+            _ = await (homeRefresh, unreadRefresh)
         } catch let error as APIError where error.statusCode == 401 || error.statusCode == 403 {
             let message = error.localizedDescription
             logout()
@@ -111,6 +113,10 @@ final class SessionStore {
 
     func userCacheKey(_ resource: String) -> String {
         "user.\(user?.id ?? 0).\(resource)"
+    }
+
+    private func refreshHomeSnapshotSilently() async {
+        try? await refreshHomeSnapshot()
     }
 
     func refreshHomeSnapshot() async throws {

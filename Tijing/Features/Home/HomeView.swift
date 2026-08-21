@@ -106,7 +106,7 @@ struct HomeView: View {
                         heroCopy
                         Spacer(minLength: 8)
                         TijingProgressRing(
-                            progress: Double(stats?.accuracy7d ?? 0) / 100,
+                            progress: stats.map { Double($0.accuracy7d) / 100 } ?? 0,
                             value: TijingFormat.percent(stats?.accuracy7d),
                             caption: "近 7 天"
                         )
@@ -114,7 +114,7 @@ struct HomeView: View {
                     VStack(alignment: .leading, spacing: 18) {
                         heroCopy
                         TijingProgressRing(
-                            progress: Double(stats?.accuracy7d ?? 0) / 100,
+                            progress: stats.map { Double($0.accuracy7d) / 100 } ?? 0,
                             value: TijingFormat.percent(stats?.accuracy7d),
                             caption: "近 7 天"
                         )
@@ -217,7 +217,7 @@ struct HomeView: View {
                 )
 
                 TijingMetricTile(
-                    value: "\(stats?.questions ?? 0)",
+                    value: stats.map { "\($0.questions)" } ?? "—",
                     title: "累计刷题",
                     systemImage: "checkmark.circle.fill",
                     tint: .accentColor
@@ -227,7 +227,7 @@ struct HomeView: View {
                     DirectPracticeLauncherView(mode: .wrong)
                 } label: {
                     TijingMetricTile(
-                        value: "\(stats?.wrong ?? 0)",
+                        value: stats.map { "\($0.wrong)" } ?? "—",
                         title: "错题待复习",
                         systemImage: "arrow.counterclockwise.circle.fill",
                         tint: TijingDesign.coral
@@ -240,7 +240,7 @@ struct HomeView: View {
                     DirectPracticeLauncherView(mode: .favorite)
                 } label: {
                     TijingMetricTile(
-                        value: "\(stats?.favorites ?? 0)",
+                        value: stats.map { "\($0.favorites)" } ?? "—",
                         title: "已收藏",
                         systemImage: "star.fill",
                         tint: TijingDesign.amber

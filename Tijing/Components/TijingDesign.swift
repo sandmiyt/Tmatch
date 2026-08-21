@@ -45,19 +45,20 @@ struct TijingDotGrid: View {
     var body: some View {
         Canvas { context, size in
             let spacing: CGFloat = 18
-            let dot = Path(ellipseIn: CGRect(x: 0, y: 0, width: 1.7, height: 1.7))
+            var dots = Path()
             var y: CGFloat = 8
             while y < size.height {
                 var x: CGFloat = 8
                 while x < size.width {
-                    context.drawLayer { layer in
-                        layer.translateBy(x: x, y: y)
-                        layer.fill(dot, with: .color((colorScheme == .dark ? Color.white : Color.black).opacity(opacity)))
-                    }
+                    dots.addEllipse(in: CGRect(x: x, y: y, width: 1.7, height: 1.7))
                     x += spacing
                 }
                 y += spacing
             }
+            context.fill(
+                dots,
+                with: .color((colorScheme == .dark ? Color.white : Color.black).opacity(opacity))
+            )
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)

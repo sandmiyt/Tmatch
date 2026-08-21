@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import CryptoKit
+import ImageIO
 
 struct RemoteAvatar: View {
     let urlString: String?
@@ -119,7 +120,7 @@ private final class AvatarImageCache: @unchecked Sendable {
             let task: Task<UIImage?, Never> = Task.detached(priority: .utility) { [directory, session] in
                 let fileURL = Self.fileURL(for: url, in: directory)
                 if let data = try? Data(contentsOf: fileURL, options: [.mappedIfSafe]),
-                   let image = UIImage(data: data) {
+                   let image = Self.decodeAvatar(data) {
                     return image
                 }
 
@@ -127,7 +128,7 @@ private final class AvatarImageCache: @unchecked Sendable {
                     let (data, response) = try await session.data(from: url)
                     guard let http = response as? HTTPURLResponse,
                           (200..<300).contains(http.statusCode),
-                          let image = UIImage(data: data) else { return nil }
+                          let image = Self.decodeAvatar(data) else { return nil }
                     try? data.write(to: fileURL, options: .atomic)
                     return image
                 } catch {
@@ -155,6 +156,22 @@ private final class AvatarImageCache: @unchecked Sendable {
     private static func fileURL(for url: URL, in directory: URL) -> URL {
         let digest = SHA256.hash(data: Data(url.absoluteString.utf8)).map { String(format: "%02x", $0) }.joined()
         return directory.appendingPathComponent(digest).appendingPathExtension("img")
+    }
+
+    private static func decodeAvatar(_ data: Data) -> UIImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else {
+            return UIImage(data: data)
+        }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: 384,
+            kCGImageSourceShouldCacheImmediately: true
+        ]
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            return UIImage(data: data)
+        }
+        return UIImage(cgImage: cgImage)
     }
 
     private static func trimDiskCache(in directory: URL) {
