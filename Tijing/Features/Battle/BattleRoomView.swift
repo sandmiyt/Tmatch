@@ -185,12 +185,12 @@ struct BattleRoomView: View {
                         Label("材料", systemImage: "doc.text.fill")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(TijingDesign.amber)
-                        Text(material).font(.body)
+                        Text(material).tijingQuestionMaterial()
                         QuestionMediaStrip(urls: question.media?.material ?? [])
                     }
                 }
             }
-            Text(question.stem).font(.title3.weight(.semibold))
+            TijingQuestionStemBlock(text: question.stem, tint: TijingDesign.violet)
             QuestionMediaStrip(urls: question.media?.stem ?? [])
 
             ForEach(options.indices, id: \.self) { index in
@@ -204,6 +204,9 @@ struct BattleRoomView: View {
                             .background(.secondary.opacity(0.12), in: Circle())
                         VStack(alignment: .leading, spacing: 7) {
                             Text(options[index])
+                                .font(.body)
+                                .fontWeight(.regular)
+                                .lineSpacing(3)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .multilineTextAlignment(.leading)
                             if let mediaOptions = question.media?.options, index < mediaOptions.count {

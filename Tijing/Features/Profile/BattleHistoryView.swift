@@ -232,7 +232,7 @@ private struct BattleHistoryDetailView: View {
             if !item.material.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !(item.media?.material ?? []).isEmpty {
                 VStack(alignment: .leading, spacing: 7) {
                     Text("材料").font(.caption.bold()).foregroundStyle(.secondary)
-                    if !item.material.isEmpty { Text(item.material).font(.subheadline) }
+                    if !item.material.isEmpty { Text(item.material).tijingQuestionMaterial() }
                     QuestionMediaStrip(urls: item.media?.material ?? [])
                 }
                 .padding(11)
@@ -240,7 +240,7 @@ private struct BattleHistoryDetailView: View {
             }
 
             Text(item.stem)
-                .font(.body.weight(.semibold))
+                .tijingQuestionStem()
             QuestionMediaStrip(urls: item.media?.stem ?? [])
 
             let options = Question.cleanOptionLabels(item.options)

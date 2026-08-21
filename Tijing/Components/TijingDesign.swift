@@ -655,6 +655,64 @@ struct TijingInteractiveAvatar: View {
 }
 
 
+
+// MARK: - Question reading typography
+private struct TijingQuestionStemModifier: ViewModifier {
+    let compact: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .font(compact ? .subheadline : .body)
+            .fontWeight(.regular)
+            .lineSpacing(compact ? 4 : 7)
+            .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct TijingQuestionMaterialModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .font(.body)
+            .fontWeight(.regular)
+            .lineSpacing(7)
+            .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+extension View {
+    func tijingQuestionStem(compact: Bool = false) -> some View {
+        modifier(TijingQuestionStemModifier(compact: compact))
+    }
+
+    func tijingQuestionMaterial() -> some View {
+        modifier(TijingQuestionMaterialModifier())
+    }
+}
+
+struct TijingQuestionStemBlock: View {
+    let text: String
+    var tint: Color = TijingDesign.indigo
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Capsule()
+                .fill(tint.opacity(0.72))
+                .frame(width: 3, height: 24)
+                .padding(.top, 2)
+                .accessibilityHidden(true)
+
+            Text(text)
+                .tijingQuestionStem()
+        }
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+    }
+}
+
 struct TijingQuestionToolStrip: View {
     let isFavorite: Bool
     let favoriteAction: () -> Void

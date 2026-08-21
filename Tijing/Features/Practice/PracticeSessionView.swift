@@ -114,26 +114,15 @@ struct PracticeSessionView: View {
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(TijingDesign.amber)
                             Text(material)
-                                .font(.body)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .tijingQuestionMaterial()
                             QuestionMediaStrip(urls: question.media?.material ?? [])
                         }
                     }
                 }
 
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "text.quote")
-                            .font(.caption.bold())
-                            .foregroundStyle(TijingDesign.violet)
-                        Text("题目")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                    }
-                    Text(question.stem)
-                        .font(.title3.weight(.semibold))
+                VStack(alignment: .leading, spacing: 12) {
+                    TijingQuestionStemBlock(text: question.stem, tint: TijingDesign.violet)
                         .textSelection(.disabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
                     QuestionMediaStrip(urls: question.media?.stem ?? [])
                 }
 
@@ -189,7 +178,10 @@ struct PracticeSessionView: View {
     }
 
     private func bottomControls(_ question: Question) -> some View {
-        VStack(spacing: 10) {
+        let hasSelection = !store.selectedDisplayIndices(for: question).isEmpty
+        let hasFeedback = store.feedbackForCurrent() != nil
+
+        return VStack(spacing: 10) {
             if store.isDeferred && store.isLast {
                 Button {
                     if store.unansweredCount > 0 {
@@ -203,39 +195,7 @@ struct PracticeSessionView: View {
                         Text("提交本组")
                             .fontWeight(.semibold)
                         Spacer()
-                        Image(systemName: "checkmark.seal")
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .disabled(store.isSubmitting)
-            } else if question.isMultiple && store.feedbackForCurrent() == nil {
-                Button {
-                    Task { await store.confirmMultiple() }
-                } label: {
-                    HStack {
-                        if store.isSubmitting { ProgressView().controlSize(.small) }
-                        Text(store.settings.answerMode == "submit" ? "确认本题" : "确认答案")
-                            .fontWeight(.semibold)
-                        Spacer()
-                        Image(systemName: "checkmark.circle")
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .disabled(store.selectedDisplayIndices(for: question).isEmpty || store.isSubmitting)
-            } else if store.isImmediate && store.isLast && store.feedbackForCurrent() != nil {
-                Button {
-                    Task { await store.finishImmediateReview() }
-                } label: {
-                    HStack {
-                        if store.isSubmitting { ProgressView().controlSize(.small) }
-                        Text("完成本组")
-                            .fontWeight(.semibold)
-                        Spacer()
-                        Image(systemName: "checkmark.seal")
+                        Image(systemName: "paperplane.fill")
                     }
                     .frame(maxWidth: .infinity)
                 }
@@ -255,20 +215,71 @@ struct PracticeSessionView: View {
 
                 Spacer(minLength: 12)
 
-                if store.isImmediate, store.feedbackForCurrent() != nil, store.canGoNext {
+                if store.isImmediate {
+                    if store.isSubmitting && hasSelection && !hasFeedback {
+                        Button { } label: {
+                            HStack(spacing: 7) {
+                                ProgressView().controlSize(.small)
+                                Text("提交中")
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(true)
+                    } else if question.isMultiple && hasSelection && !hasFeedback {
+                        Button {
+                            Task { await store.confirmMultiple() }
+                        } label: {
+                            Label("提交答案", systemImage: "paperplane.fill")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(store.isSubmitting)
+                    } else if store.canGoNext {
+                        if hasFeedback {
+                            Button {
+                                store.next()
+                            } label: {
+                                Label("下一题", systemImage: "chevron.right")
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(store.isSubmitting)
+                        } else {
+                            Button {
+                                store.next()
+                            } label: {
+                                Label("下一题", systemImage: "chevron.right")
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(store.isSubmitting)
+                        }
+                    } else {
+                        Button {
+                            Task { await store.finishImmediateReview() }
+                        } label: {
+                            HStack(spacing: 7) {
+                                if store.isSubmitting { ProgressView().controlSize(.small) }
+                                Text("完成本组")
+                                Image(systemName: "flag.checkered")
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(store.isSubmitting)
+                    }
+                } else if question.isMultiple && hasSelection && store.canGoNext {
                     Button {
-                        store.next()
+                        Task { await store.confirmMultiple() }
                     } label: {
-                        Label("下一题", systemImage: "chevron.right")
+                        Label("确认本题", systemImage: "arrow.right.circle.fill")
                     }
                     .buttonStyle(.borderedProminent)
-                } else if store.settings.answerMode == "submit", store.canGoNext {
+                    .disabled(store.isSubmitting)
+                } else if store.canGoNext {
                     Button {
                         store.next()
                     } label: {
                         Label("下一题", systemImage: "chevron.right")
                     }
                     .buttonStyle(.bordered)
+                    .disabled(store.isSubmitting)
                 }
             }
             .controlSize(.large)
@@ -473,6 +484,8 @@ private struct OptionRow: View {
                     .foregroundStyle(circleForeground)
                 Text(text)
                     .font(.body)
+                    .fontWeight(.regular)
+                    .lineSpacing(3)
                     .foregroundStyle(excluded ? .secondary : .primary)
                     .strikethrough(excluded)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -531,7 +544,7 @@ private struct FeedbackCard: View {
 
             if let explanation = feedback.explanation, !explanation.isEmpty {
                 Text("解析").font(.headline)
-                Text(remapExplanation(explanation)).font(.body)
+                Text(remapExplanation(explanation)).font(.body).fontWeight(.regular).lineSpacing(5)
                 QuestionMediaStrip(urls: feedback.media?.explanation ?? [])
             }
 
@@ -635,7 +648,7 @@ private struct PracticeBatchResultView: View {
                                                 Text("第 \(offset + 1) 题 · \(item.correct ? "正确" : "错误")")
                                                     .font(.subheadline.weight(.semibold))
                                                 Text(item.stem ?? question(item.questionID)?.stem ?? "题目")
-                                                    .font(.subheadline)
+                                                    .tijingQuestionStem(compact: true)
                                                     .lineLimit(3)
                                                 if !item.correct, let explanation = item.explanation, !explanation.isEmpty {
                                                     Text(explanation)

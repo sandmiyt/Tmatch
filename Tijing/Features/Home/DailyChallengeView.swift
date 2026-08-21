@@ -82,15 +82,14 @@ struct DailyChallengeView: View {
                 if let material = question.material, !material.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("材料").font(.caption.bold()).foregroundStyle(.tint)
-                        Text(material).font(.body)
+                        Text(material).tijingQuestionMaterial()
                         QuestionMediaStrip(urls: question.media?.material ?? [])
                     }
                     .padding(14)
                     .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
 
-                Text(question.stem)
-                    .font(.title3.weight(.semibold))
+                TijingQuestionStemBlock(text: question.stem, tint: TijingDesign.violet)
                     .textSelection(.disabled)
                 QuestionMediaStrip(urls: question.media?.stem ?? [])
 
@@ -205,6 +204,9 @@ struct DailyChallengeView: View {
                     .foregroundStyle(isPicked ? Color.white : Color.primary)
                 VStack(alignment: .leading, spacing: 8) {
                     Text(question.options[optionIndex])
+                        .font(.body)
+                        .fontWeight(.regular)
+                        .lineSpacing(3)
                         .strikethrough(isExcluded)
                         .foregroundStyle(isExcluded ? .secondary : .primary)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -374,10 +376,10 @@ struct DailyChallengeView: View {
                             .foregroundStyle(item.correct ? .green : .red)
                     }
                     if let material = item.material, !material.isEmpty {
-                        Text(material).font(.subheadline).padding(10).background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 10))
+                        Text(material).tijingQuestionMaterial().padding(10).background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 10))
                     }
                     QuestionMediaStrip(urls: item.media?.material ?? [])
-                    Text(item.stem).font(.headline)
+                    Text(item.stem).tijingQuestionStem(compact: true)
                     QuestionMediaStrip(urls: item.media?.stem ?? [])
                     VStack(spacing: 7) {
                         ForEach(item.options.indices, id: \.self) { option in

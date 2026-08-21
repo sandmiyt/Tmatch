@@ -29,7 +29,7 @@ struct PracticeSettingsView: View {
         }
         .navigationTitle("练习设置")
         .navigationBarTitleDisplayMode(.inline)
-        .sensoryFeedback(.selection, trigger: draft.questionCount)
+        .sensoryFeedback(.selection, trigger: draft.questionCount / 5)
         .sensoryFeedback(.selection, trigger: draft.difficultyMinRatio / 5)
         .sensoryFeedback(.selection, trigger: draft.difficultyMaxRatio / 5)
         .sensoryFeedback(.selection, trigger: draft.answerMode)
@@ -51,21 +51,39 @@ struct PracticeSettingsView: View {
 
     private var questionCountCard: some View {
         VStack(alignment: .leading, spacing: 15) {
-            TijingSectionHeading("每组题量", subtitle: "10～40 题；修改不会重建已经生成的未完成题组")
+            TijingSectionHeading("每组题量", subtitle: "滑动选择每组题数；修改不会重建已经生成的未完成题组")
 
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("\(draft.questionCount)")
-                        .font(.system(size: 46, weight: .heavy, design: .rounded))
-                        .monospacedDigit()
-                        .contentTransition(.numericText())
-                    Text("题 / 组")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+            VStack(spacing: 18) {
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("\(draft.questionCount)")
+                            .font(.system(size: 48, weight: .bold, design: .rounded))
+                            .monospacedDigit()
+                            .contentTransition(.numericText())
+                            .animation(.snappy(duration: 0.22), value: draft.questionCount)
+                        Text("题 / 组")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    TijingMicroBadge(
+                        title: "滑动选择 · 5题一反馈",
+                        systemImage: "hand.draw.fill",
+                        tint: TijingDesign.indigo
+                    )
                 }
-                Spacer()
-                Stepper("题量", value: $draft.questionCount, in: 10...40, step: 1)
-                    .labelsHidden()
+
+                TijingQuestionCountSlider(value: $draft.questionCount)
+
+                HStack {
+                    ForEach([10, 15, 20, 25, 30, 35, 40], id: \.self) { value in
+                        Text("\(value)")
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(abs(value - draft.questionCount) <= 1 ? TijingDesign.indigo : .secondary)
+                            .fontWeight(abs(value - draft.questionCount) <= 1 ? .semibold : .regular)
+                        if value != 40 { Spacer(minLength: 0) }
+                    }
+                }
             }
             .padding(18)
             .tijingCard()
@@ -74,55 +92,47 @@ struct PracticeSettingsView: View {
 
     private var difficultyCard: some View {
         VStack(alignment: .leading, spacing: 15) {
-            TijingSectionHeading("题目难度", subtitle: "按全站正确率筛选；两个边界始终至少相差 30%")
+            TijingSectionHeading("题目难度", subtitle: "拖动一条难度范围；两个端点始终至少相差 30%")
 
             VStack(spacing: 18) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .center, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
                         Text("当前范围")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Text("\(draft.difficultyMinRatio)% ～ \(draft.difficultyMaxRatio)%")
                             .font(.system(.title2, design: .rounded, weight: .bold))
                             .monospacedDigit()
+                            .contentTransition(.numericText())
                     }
                     Spacer()
-                    Image(systemName: "dial.medium.fill")
-                        .font(.title2)
-                        .foregroundStyle(TijingDesign.violet)
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Text("全站正确率")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Text("越左越难 · 越右越易")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(TijingDesign.violet)
+                    }
                 }
 
-                VStack(spacing: 10) {
-                    valueHeader("最低正确率", value: draft.difficultyMinRatio)
-                    Slider(
-                        value: Binding(
-                            get: { Double(draft.difficultyMinRatio) },
-                            set: { value in
-                                let next = Int(value.rounded())
-                                draft.difficultyMinRatio = min(next, draft.difficultyMaxRatio - 30)
-                            }
-                        ),
-                        in: 0...70,
-                        step: 1
-                    )
-                    .tint(TijingDesign.indigo)
-                }
+                TijingDifficultyRangeSlider(
+                    lower: $draft.difficultyMinRatio,
+                    upper: $draft.difficultyMaxRatio,
+                    minimumGap: 30
+                )
 
-                VStack(spacing: 10) {
-                    valueHeader("最高正确率", value: draft.difficultyMaxRatio)
-                    Slider(
-                        value: Binding(
-                            get: { Double(draft.difficultyMaxRatio) },
-                            set: { value in
-                                let next = Int(value.rounded())
-                                draft.difficultyMaxRatio = max(next, draft.difficultyMinRatio + 30)
-                            }
-                        ),
-                        in: 30...100,
-                        step: 1
-                    )
-                    .tint(TijingDesign.cyan)
+                HStack {
+                    Label("更难", systemImage: "flame.fill")
+                        .foregroundStyle(TijingDesign.coral)
+                    Spacer()
+                    Text("正确率范围")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Label("更易", systemImage: "leaf.fill")
+                        .foregroundStyle(TijingDesign.mint)
                 }
+                .font(.caption)
             }
             .padding(18)
             .tijingCard()
@@ -151,7 +161,7 @@ struct PracticeSettingsView: View {
                         )
                     Text(
                         draft.answerMode == "immediate"
-                        ? "选完答案立即显示正确答案与解析，由你手动切换下一题。"
+                        ? "单选点选后立即显示答案与解析，多选确认后提交；不会自动跳题，可手动切换下一题。"
                         : "作答时不显示答案，完成本题后自动进入下一题，最后手动交卷统一看解析。"
                     )
                     .font(.subheadline)
@@ -164,15 +174,199 @@ struct PracticeSettingsView: View {
         }
     }
 
-    private func valueHeader(_ title: String, value: Int) -> some View {
-        HStack {
-            Text(title)
-                .font(.subheadline.weight(.medium))
-            Spacer()
-            Text("\(value)%")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
+}
+
+
+private struct TijingQuestionCountSlider: View {
+    @Binding var value: Int
+    @State private var isDragging = false
+
+    private let lowerBound = 10
+    private let upperBound = 40
+    private let thumbSize: CGFloat = 34
+
+    var body: some View {
+        GeometryReader { proxy in
+            let trackWidth = max(1, proxy.size.width - thumbSize)
+            let progress = CGFloat(value - lowerBound) / CGFloat(upperBound - lowerBound)
+            let thumbX = thumbSize / 2 + progress * trackWidth
+
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.secondary.opacity(0.13))
+                    .frame(height: 8)
+                    .padding(.horizontal, thumbSize / 2)
+
+                Capsule()
+                    .fill(
+                        LinearGradient(
+                            colors: [TijingDesign.indigo, TijingDesign.violet],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .frame(width: max(0, thumbX - thumbSize / 2), height: 8)
+                    .offset(x: thumbSize / 2)
+
+                ForEach([10, 15, 20, 25, 30, 35, 40], id: \.self) { tick in
+                    let tickProgress = CGFloat(tick - lowerBound) / CGFloat(upperBound - lowerBound)
+                    let tickX = thumbSize / 2 + tickProgress * trackWidth
+                    Circle()
+                        .fill(tick <= value ? Color.white.opacity(0.9) : Color.secondary.opacity(0.28))
+                        .frame(width: tick == value ? 6 : 4, height: tick == value ? 6 : 4)
+                        .position(x: tickX, y: 30)
+                        .allowsHitTesting(false)
+                }
+
+                ZStack {
+                    Circle()
+                        .fill(.background)
+                        .shadow(color: Color.black.opacity(isDragging ? 0.16 : 0.08), radius: isDragging ? 8 : 4, y: 2)
+                    Circle()
+                        .strokeBorder(TijingDesign.indigo.opacity(isDragging ? 1 : 0.72), lineWidth: isDragging ? 2.5 : 1.5)
+                    Image(systemName: "line.3.horizontal")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(TijingDesign.indigo)
+                }
+                .frame(width: thumbSize, height: thumbSize)
+                .scaleEffect(isDragging ? 1.12 : 1)
+                .position(x: thumbX, y: 30)
+                .animation(.spring(response: 0.24, dampingFraction: 0.72), value: isDragging)
+            }
+            .frame(height: 60)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { gesture in
+                        if !isDragging {
+                            isDragging = true
+                            Haptics.light()
+                        }
+                        let localX = min(max(0, gesture.location.x - thumbSize / 2), trackWidth)
+                        let raw = Double(localX / trackWidth) * Double(upperBound - lowerBound) + Double(lowerBound)
+                        value = min(upperBound, max(lowerBound, Int(raw.rounded())))
+                    }
+                    .onEnded { _ in
+                        isDragging = false
+                        Haptics.light()
+                    }
+            )
         }
+        .frame(height: 60)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("每组题量")
+        .accessibilityValue("\(value) 题")
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment:
+                value = min(upperBound, value + 1)
+            case .decrement:
+                value = max(lowerBound, value - 1)
+            @unknown default:
+                break
+            }
+        }
+    }
+}
+
+
+private struct TijingDifficultyRangeSlider: View {
+    @Binding var lower: Int
+    @Binding var upper: Int
+    let minimumGap: Int
+
+    @State private var activeHandle: Handle?
+
+    private enum Handle { case lower, upper }
+    private let thumbSize: CGFloat = 28
+
+    var body: some View {
+        GeometryReader { proxy in
+            let trackWidth = max(1, proxy.size.width - thumbSize)
+            let lowerX = xPosition(for: lower, trackWidth: trackWidth)
+            let upperX = xPosition(for: upper, trackWidth: trackWidth)
+
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.secondary.opacity(0.14))
+                    .frame(height: 8)
+                    .padding(.horizontal, thumbSize / 2)
+
+                Capsule()
+                    .fill(
+                        LinearGradient(
+                            colors: [TijingDesign.violet, TijingDesign.indigo, TijingDesign.cyan],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .frame(width: max(0, upperX - lowerX), height: 8)
+                    .offset(x: lowerX)
+
+                thumb(value: lower, isActive: activeHandle == .lower)
+                    .position(x: lowerX, y: 28)
+
+                thumb(value: upper, isActive: activeHandle == .upper)
+                    .position(x: upperX, y: 28)
+            }
+            .frame(height: 56)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        if activeHandle == nil {
+                            activeHandle = abs(value.location.x - lowerX) <= abs(value.location.x - upperX) ? .lower : .upper
+                            Haptics.light()
+                        }
+                        update(locationX: value.location.x, trackWidth: trackWidth)
+                    }
+                    .onEnded { _ in
+                        activeHandle = nil
+                        Haptics.light()
+                    }
+            )
+        }
+        .frame(height: 56)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("题目难度范围")
+        .accessibilityValue("最低正确率 \(lower)%，最高正确率 \(upper)%")
+    }
+
+    private func xPosition(for value: Int, trackWidth: CGFloat) -> CGFloat {
+        thumbSize / 2 + CGFloat(value) / 100 * trackWidth
+    }
+
+    private func value(for x: CGFloat, trackWidth: CGFloat) -> Int {
+        let local = min(max(0, x - thumbSize / 2), trackWidth)
+        return min(100, max(0, Int((local / trackWidth * 100).rounded())))
+    }
+
+    private func update(locationX: CGFloat, trackWidth: CGFloat) {
+        let next = value(for: locationX, trackWidth: trackWidth)
+        switch activeHandle {
+        case .lower:
+            lower = min(next, upper - minimumGap)
+        case .upper:
+            upper = max(next, lower + minimumGap)
+        case nil:
+            break
+        }
+    }
+
+    private func thumb(value: Int, isActive: Bool) -> some View {
+        ZStack {
+            Circle()
+                .fill(.background)
+                .shadow(color: Color.black.opacity(isActive ? 0.16 : 0.09), radius: isActive ? 7 : 4, y: 2)
+            Circle()
+                .strokeBorder(isActive ? TijingDesign.indigo : Color.secondary.opacity(0.25), lineWidth: isActive ? 2.5 : 1)
+            Text("\(value)")
+                .font(.system(size: 9, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(isActive ? TijingDesign.indigo : .secondary)
+        }
+        .frame(width: thumbSize, height: thumbSize)
+        .scaleEffect(isActive ? 1.14 : 1)
+        .animation(.spring(response: 0.24, dampingFraction: 0.72), value: isActive)
     }
 }
