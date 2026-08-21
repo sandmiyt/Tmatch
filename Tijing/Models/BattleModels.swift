@@ -185,6 +185,19 @@ struct BattleReview: Decodable, Hashable {
         case weakSubjects = "weak_subjects"
         case keyRounds = "key_rounds"
     }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        reason = (try? container.decode(String.self, forKey: .reason)) ?? "本局对战已结束。"
+        myAccuracy = (try? container.decode(Int.self, forKey: .myAccuracy)) ?? 0
+        opponentAccuracy = (try? container.decode(Int.self, forKey: .opponentAccuracy)) ?? 0
+        myAvgElapsedMS = try? container.decode(Int.self, forKey: .myAvgElapsedMS)
+        opponentAvgElapsedMS = try? container.decode(Int.self, forKey: .opponentAvgElapsedMS)
+        myAvgCorrectElapsedMS = try? container.decode(Int.self, forKey: .myAvgCorrectElapsedMS)
+        opponentAvgCorrectElapsedMS = try? container.decode(Int.self, forKey: .opponentAvgCorrectElapsedMS)
+        weakSubjects = (try? container.decode([BattleReviewWeakSubject].self, forKey: .weakSubjects)) ?? []
+        keyRounds = (try? container.decode([BattleReviewRound].self, forKey: .keyRounds)) ?? []
+    }
 }
 
 struct BattleReviewWeakSubject: Decodable, Hashable, Identifiable {

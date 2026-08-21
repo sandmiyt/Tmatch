@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 struct BattleHistoryView: View {
@@ -245,10 +246,12 @@ private struct BattleHistoryDetailView: View {
 
             let options = Question.cleanOptionLabels(item.options)
             let optionMedia = item.media?.options ?? []
+            let answerSet = Set(item.answers)
+            let pickedSet = Set(item.picked)
             VStack(spacing: 9) {
                 ForEach(options.indices, id: \.self) { index in
-                    let isAnswer = index == item.answer
-                    let isPickedWrong = item.answered && index == item.picked && !isAnswer
+                    let isAnswer = answerSet.contains(index)
+                    let isPickedWrong = item.answered && pickedSet.contains(index) && !isAnswer
                     VStack(alignment: .leading, spacing: 8) {
                         HStack(alignment: .top, spacing: 10) {
                             Text(TijingFormat.optionLetter(index))
@@ -269,8 +272,8 @@ private struct BattleHistoryDetailView: View {
             }
 
             HStack(spacing: 12) {
-                Text("我的答案：\(answerLetter(item.answered ? item.picked : nil))")
-                Text("正确答案：\(answerLetter(item.answer))")
+                Text("我的答案：\(item.answered ? answerLetters(item.picked) : "未作答")")
+                Text("正确答案：\(answerLetters(item.answers))")
                 if let elapsed = item.elapsedMS {
                     Text("用时：\(max(1, Int((Double(elapsed) / 1000).rounded())))秒")
                 }
@@ -299,9 +302,9 @@ private struct BattleHistoryDetailView: View {
         return .secondary
     }
 
-    private func answerLetter(_ index: Int?) -> String {
-        guard let index, index >= 0, index < 26 else { return "未作答" }
-        return TijingFormat.optionLetter(index)
+    private func answerLetters(_ indices: [Int]) -> String {
+        let values = indices.filter { $0 >= 0 && $0 < 26 }.map { TijingFormat.optionLetter($0) }
+        return values.isEmpty ? "未作答" : values.joined(separator: "、")
     }
 
     private func ratingText(_ delta: Int?) -> String {
@@ -587,6 +590,29 @@ private struct BattleHistoryDetail: Decodable {
         case ratingDelta = "rating_delta"
         case createdAt = "created_at"
     }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = container.flexibleInt(forKey: .id) ?? 0
+        roomID = container.flexibleString(forKey: .roomID) ?? ""
+        mode = container.flexibleString(forKey: .mode) ?? "quick"
+        rule = container.flexibleString(forKey: .rule) ?? "speed"
+        opponent = container.flexibleString(forKey: .opponent) ?? "对手"
+        correctCount = container.flexibleInt(forKey: .correctCount) ?? 0
+        opponentCorrectCount = container.flexibleInt(forKey: .opponentCorrectCount) ?? 0
+        won = container.flexibleBool(forKey: .won) ?? false
+        draw = container.flexibleBool(forKey: .draw) ?? false
+        ratingDelta = container.flexibleInt(forKey: .ratingDelta)
+        createdAt = container.flexibleString(forKey: .createdAt) ?? ""
+
+        let decodedDetails = (try? container.decode([LossyDecodable<BattleHistoryQuestion>].self, forKey: .details)) ?? []
+        details = decodedDetails.compactMap(\.value)
+
+        // Some deployed servers return an older review schema. A malformed review
+        // must not prevent the recorded questions themselves from being displayed.
+        review = try? container.decode(BattleReview.self, forKey: .review)
+        legacy = container.flexibleBool(forKey: .legacy) ?? details.isEmpty
+    }
 }
 
 private struct BattleHistoryQuestion: Decodable, Identifiable {
@@ -596,8 +622,9 @@ private struct BattleHistoryQuestion: Decodable, Identifiable {
     let material: String
     let options: [String]
     let media: QuestionMediaData?
-    let picked: Int?
+    let picked: [Int]
     let answer: Int
+    let answers: [Int]
     let answered: Bool
     let correct: Bool
     let elapsedMS: Int?
@@ -609,10 +636,86 @@ private struct BattleHistoryQuestion: Decodable, Identifiable {
     var id: String { "\(questionIndex)-\(questionID)" }
 
     enum CodingKeys: String, CodingKey {
-        case stem, material, options, media, picked, answer, answered, correct, subject, topic, explanation, favorite
+        case stem, material, options, media, picked, answer, answers, answered, correct, subject, topic, explanation, favorite
         case questionIndex = "question_index"
         case questionID = "question_id"
         case elapsedMS = "elapsed_ms"
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        questionIndex = container.flexibleInt(forKey: .questionIndex) ?? 0
+        questionID = container.flexibleInt(forKey: .questionID) ?? -1
+        stem = container.flexibleString(forKey: .stem) ?? ""
+        material = container.flexibleString(forKey: .material) ?? ""
+        options = (try? container.decode([String].self, forKey: .options)) ?? []
+        media = try? container.decode(QuestionMediaData.self, forKey: .media)
+        picked = container.flexibleIntArray(forKey: .picked)
+
+        let decodedAnswers = container.flexibleIntArray(forKey: .answers)
+        let decodedAnswer = container.flexibleInt(forKey: .answer)
+        answers = decodedAnswers.isEmpty ? (decodedAnswer.map { [$0] } ?? []) : decodedAnswers
+        answer = decodedAnswer ?? answers.first ?? -1
+        answered = container.flexibleBool(forKey: .answered) ?? picked.contains(where: { $0 >= 0 })
+        correct = container.flexibleBool(forKey: .correct) ?? false
+        elapsedMS = container.flexibleInt(forKey: .elapsedMS)
+        subject = container.flexibleString(forKey: .subject) ?? ""
+        topic = container.flexibleString(forKey: .topic) ?? ""
+        explanation = container.flexibleString(forKey: .explanation) ?? ""
+        favorite = container.flexibleBool(forKey: .favorite) ?? false
+    }
+}
+
+private struct LossyDecodable<Value: Decodable>: Decodable {
+    let value: Value?
+
+    init(from decoder: Decoder) throws {
+        value = try? Value(from: decoder)
+    }
+}
+
+private extension KeyedDecodingContainer {
+    func flexibleInt(forKey key: Key) -> Int? {
+        if let value = try? decode(Int.self, forKey: key) { return value }
+        if let value = try? decode(Double.self, forKey: key), value.isFinite { return Int(value) }
+        if let value = try? decode(String.self, forKey: key) {
+            return Int(value.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+        return nil
+    }
+
+    func flexibleString(forKey key: Key) -> String? {
+        if let value = try? decode(String.self, forKey: key) { return value }
+        if let value = try? decode(Int.self, forKey: key) { return String(value) }
+        return nil
+    }
+
+    func flexibleBool(forKey key: Key) -> Bool? {
+        if let value = try? decode(Bool.self, forKey: key) { return value }
+        if let value = flexibleInt(forKey: key) { return value != 0 }
+        if let value = try? decode(String.self, forKey: key) {
+            switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+            case "true", "yes", "y", "是": return true
+            case "false", "no", "n", "否", "": return false
+            default: return nil
+            }
+        }
+        return nil
+    }
+
+    func flexibleIntArray(forKey key: Key) -> [Int] {
+        if let values = try? decode([Int].self, forKey: key) { return values }
+        if let values = try? decode([String].self, forKey: key) {
+            return values.compactMap { Int($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+        }
+        if let value = flexibleInt(forKey: key) { return [value] }
+        if let value = try? decode(String.self, forKey: key) {
+            return value
+                .trimmingCharacters(in: CharacterSet(charactersIn: "[]() "))
+                .components(separatedBy: CharacterSet(charactersIn: ",，、 "))
+                .compactMap { Int($0) }
+        }
+        return []
     }
 }
 
