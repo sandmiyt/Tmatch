@@ -47,29 +47,39 @@ jobs:
         run: |
           set -euo pipefail
 
-          APP_PATH="$PWD/DerivedData/Build/Products/Release-iphoneos/Tijing.app"
+          ROOT_DIR="$PWD"
+          APP_PATH="$ROOT_DIR/DerivedData/Build/Products/Release-iphoneos/Tijing.app"
+          IPA_PATH="$ROOT_DIR/Tijing-unsigned.ipa"
+          PACKAGE_DIR="$ROOT_DIR/ipa"
+
           if [ ! -d "$APP_PATH" ]; then
             echo "error: Built app not found at $APP_PATH"
-            find "$PWD/DerivedData/Build/Products" -maxdepth 3 -type d -name '*.app' -print || true
+            find "$ROOT_DIR/DerivedData/Build/Products" -maxdepth 3 -type d -name '*.app' -print || true
             exit 1
           fi
 
-          rm -rf "$PWD/ipa"
-          mkdir -p "$PWD/ipa/Payload"
-          cp -R "$APP_PATH" "$PWD/ipa/Payload/Tijing.app"
+          rm -rf "$PACKAGE_DIR" "$IPA_PATH"
+          mkdir -p "$PACKAGE_DIR/Payload"
+          cp -R "$APP_PATH" "$PACKAGE_DIR/Payload/Tijing.app"
 
           # Keep the package explicitly unsigned so the user can sign it later.
-          rm -rf "$PWD/ipa/Payload/Tijing.app/_CodeSignature"
-          rm -f "$PWD/ipa/Payload/Tijing.app/embedded.mobileprovision"
+          rm -rf "$PACKAGE_DIR/Payload/Tijing.app/_CodeSignature"
+          rm -f "$PACKAGE_DIR/Payload/Tijing.app/embedded.mobileprovision"
 
           (
-            cd "$PWD/ipa"
-            /usr/bin/zip -qry "$PWD/Tijing-unsigned.ipa" Payload
+            cd "$PACKAGE_DIR"
+            /usr/bin/zip -qry "$IPA_PATH" Payload
           )
 
+          if [ ! -f "$IPA_PATH" ]; then
+            echo "error: IPA packaging finished but output was not created at $IPA_PATH"
+            find "$ROOT_DIR" -maxdepth 3 -name '*.ipa' -print || true
+            exit 1
+          fi
+
           echo "Generated IPA:"
-          ls -lh "$PWD/Tijing-unsigned.ipa"
-          shasum -a 256 "$PWD/Tijing-unsigned.ipa"
+          ls -lh "$IPA_PATH"
+          shasum -a 256 "$IPA_PATH"
 
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
