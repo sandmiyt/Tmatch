@@ -24,8 +24,8 @@ struct ExamCalendarView: View {
                         followedCarousel
                     }
 
-                    if let items = response?.items, !items.isEmpty {
-                        ForEach(Array(items.enumerated()), id: \.element.id) { index, exam in
+                    if !filteredItems.isEmpty {
+                        ForEach(Array(filteredItems.enumerated()), id: \.element.id) { index, exam in
                             examCard(exam, index: index)
                         }
                     } else if !loading {
@@ -48,7 +48,7 @@ struct ExamCalendarView: View {
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
-        .task(id: city + String(followedOnly)) { await load() }
+        .task(id: session.isAuthenticated) { await load() }
         .task(id: followedItems.map(\.id)) { await runFollowedCarousel() }
         .refreshable { await load() }
         .sensoryFeedback(.selection, trigger: city)
@@ -64,6 +64,27 @@ struct ExamCalendarView: View {
         }
     }
 
+    private var filteredItems: [RecruitmentExam] {
+        guard let items = response?.items else { return [] }
+        return items.filter { exam in
+            let matchesCity = city == "全部" || exam.city == city || exam.region == city
+            let matchesFollow = !followedOnly || exam.followed == true
+            return matchesCity && matchesFollow
+        }
+    }
+
+    private var availableCities: [ExamCity] {
+        if let cities = response?.cities, !cities.isEmpty { return cities }
+
+        let counts = Dictionary(grouping: response?.items ?? [], by: { $0.city ?? $0.region ?? "" })
+            .filter { !$0.key.isEmpty }
+            .map { ExamCity(name: $0.key, count: $0.value.count) }
+        return counts.sorted { lhs, rhs in
+            if lhs.count == rhs.count { return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending }
+            return lhs.count > rhs.count
+        }
+    }
+
     private var filterBar: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
@@ -73,7 +94,8 @@ struct ExamCalendarView: View {
 
                 Spacer(minLength: 8)
 
-                if let count = response?.items.count {
+                if response != nil {
+                    let count = filteredItems.count
                     Text("\(count) 场")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
@@ -85,18 +107,18 @@ struct ExamCalendarView: View {
             HStack(spacing: 9) {
                 Menu {
                     Button {
-                        city = "全部"
+                        withAnimation(.snappy(duration: 0.28)) { city = "全部" }
                     } label: {
                         Label("全部地区", systemImage: city == "全部" ? "checkmark" : "location")
                     }
 
-                    if !(response?.cities ?? []).isEmpty {
+                    if !availableCities.isEmpty {
                         Divider()
                     }
 
-                    ForEach(response?.cities ?? []) { item in
+                    ForEach(availableCities) { item in
                         Button {
-                            city = item.name
+                            withAnimation(.snappy(duration: 0.28)) { city = item.name }
                         } label: {
                             HStack {
                                 Text("\(item.name)（\(item.count)）")
@@ -116,7 +138,7 @@ struct ExamCalendarView: View {
                 .buttonStyle(.plain)
 
                 Button {
-                    followedOnly.toggle()
+                    withAnimation(.snappy(duration: 0.28)) { followedOnly.toggle() }
                     Haptics.selection()
                 } label: {
                     filterChip(
@@ -332,18 +354,15 @@ struct ExamCalendarView: View {
 
     @MainActor private func load() async {
         let path = session.token == nil ? "/api/exams/calendar" : "/api/exams/calendar/me"
-        var query: [URLQueryItem] = []
-        if city != "全部" { query.append(URLQueryItem(name: "city", value: city)) }
-        if session.token != nil { query.append(URLQueryItem(name: "followed_only", value: String(followedOnly))) }
         let owner = session.user.map { String($0.id) } ?? "public"
-        let cacheKey = "calendar.\(owner).\(city).\(followedOnly)"
+        let cacheKey = "calendar.\(owner).all"
 
         if response == nil { response = session.api.cachedResponse(for: cacheKey) }
         loading = response == nil
         defer { loading = false }
         do {
             response = try await session.api.requestCached(
-                path, token: session.token, query: query, cacheKey: cacheKey
+                path, token: session.token, cacheKey: cacheKey
             )
             if let token = session.token {
                 let followedQuery = [URLQueryItem(name: "followed_only", value: "true")]
@@ -353,7 +372,7 @@ struct ExamCalendarView: View {
                     query: followedQuery,
                     cacheKey: "calendar.\(owner).followed.carousel"
                 ) {
-                    followedItems = followedResponse.items.filter { $0.followed != false }
+                    followedItems = followedResponse.items.filter { $0.followed == true }
                     if followedCarouselIndex >= followedItems.count { followedCarouselIndex = 0 }
                 }
             } else {
