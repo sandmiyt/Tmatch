@@ -141,7 +141,7 @@ struct FriendsView: View {
 
     private func friendRow(_ relation: FriendRelation) -> some View {
         let isOnline = presence[relation.user.id] ?? relation.user.online ?? false
-        HStack(spacing: 12) {
+        return HStack(spacing: 12) {
             NavigationLink {
                 PublicProfileView(userID: relation.user.id)
             } label: {
