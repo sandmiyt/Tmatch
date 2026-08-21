@@ -15,6 +15,7 @@ struct BattleLobbyView: View {
     @State private var catalogLoading = true
     @State private var lastMatchStage = "exact"
     @State private var matchWaitSeconds = 0
+    @State private var matchStartedAt: Date?
 
     private var selectedSubject: PracticeSubject? { catalog.first { $0.name == subject } }
     private var scopeLabel: String { topic.isEmpty ? (subject.isEmpty ? "全部题库" : subject) : "\(subject) · \(topic)" }
@@ -365,6 +366,7 @@ struct BattleLobbyView: View {
         error = nil
         lastMatchStage = "exact"
         matchWaitSeconds = 0
+        matchStartedAt = Date()
         matchStatus = "正在寻找 \(scopeLabel) · 排位赛对手…" + (topic.isEmpty ? "" : "\n（60秒未匹配将自动扩大到本题库全部章节）")
         matchTask = Task { await matchLoop() }
     }
@@ -374,6 +376,7 @@ struct BattleLobbyView: View {
         matchTask?.cancel(); matchTask = nil
         matchStatus = ""
         matchWaitSeconds = 0
+        matchStartedAt = nil
         lastMatchStage = "exact"
         guard let token = session.token else { return }
         Task { let _: EmptyResponse? = try? await session.api.request("/api/matchmaking/cancel", method: .post, body: EmptyBody(), token: token) }
@@ -400,8 +403,10 @@ struct BattleLobbyView: View {
                     Haptics.success()
                     return
                 }
-                let waited = response.waitSeconds ?? 0
-                matchWaitSeconds = waited
+                let serverWaited = response.waitSeconds ?? 0
+                let localWaited = matchStartedAt.map { max(0, Int(Date().timeIntervalSince($0))) } ?? serverWaited
+                matchWaitSeconds = max(serverWaited, localWaited)
+                let waited = matchWaitSeconds
                 let nextStage = response.matchStage ?? "exact"
                 if nextStage != lastMatchStage {
                     lastMatchStage = nextStage
