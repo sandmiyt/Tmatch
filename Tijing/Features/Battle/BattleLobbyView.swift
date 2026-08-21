@@ -564,12 +564,28 @@ private struct TijingMatchmakingScreen: View {
                 Haptics.selection()
                 cancel()
             } label: {
-                Label("取消匹配", systemImage: "xmark")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
+                HStack(spacing: 9) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 13, weight: .bold))
+                        .frame(width: 26, height: 26)
+                        .background(Color.red.opacity(0.10), in: Circle())
+
+                    Text("取消匹配")
+                        .font(.headline)
+                }
+                .foregroundStyle(Color.red)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .padding(.horizontal, 18)
+                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(Color.red.opacity(0.12), lineWidth: 1)
+                }
+                .shadow(color: Color.black.opacity(0.05), radius: 12, y: 5)
+                .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
+            .buttonStyle(TijingPressableCardStyle())
             .padding(.horizontal, 28)
             .padding(.bottom, 22)
         }

@@ -84,7 +84,7 @@ struct HomeView: View {
 
     private var pageHeader: some View {
         VStack(alignment: .leading, spacing: 7) {
-            Text("上岸之前，先上分。")
+            Text("把进步，刷成段位。")
                 .font(.system(.largeTitle, design: .rounded, weight: .heavy))
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
                 .minimumScaleFactor(dynamicTypeSize.isAccessibilitySize ? 1 : 0.74)
