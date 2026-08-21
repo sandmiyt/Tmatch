@@ -18,7 +18,7 @@ struct BattleLobbyView: View {
 
     var body: some View {
         List {
-            Section("匹配范围") {
+            Section {
                 Picker("题库", selection: $subject) {
                     Text("全部题库").tag("")
                     ForEach(catalog) { item in
@@ -49,11 +49,13 @@ struct BattleLobbyView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+            } header: {
+                Text("匹配范围")
             } footer: {
                 Text("每局随机抽取 10 道不重复题目；同一局双方看到相同的随机选项顺序。")
             }
 
-            Section("排位赛") {
+            Section {
                 if matching {
                     HStack(alignment: .top, spacing: 12) {
                         ProgressView()
@@ -78,11 +80,13 @@ struct BattleLobbyView: View {
                     .controlSize(.large)
                     .listRowBackground(Color.clear)
                 }
+            } header: {
+                Text("排位赛")
             } footer: {
                 Text("10 题抢答，每题 60 秒；先比答对题数，同分再比答对题累计用时。指定章节时，60 秒未匹配会扩大到本题库全部章节，120 秒后再扩大到全部题库。")
             }
 
-            Section("好友与 AI") {
+            Section {
                 Button {
                     createAI()
                 } label: {
@@ -96,6 +100,8 @@ struct BattleLobbyView: View {
                     Label("创建好友房间", systemImage: "person.2.badge.plus")
                 }
                 .disabled(matching)
+            } header: {
+                Text("好友与 AI")
             } footer: {
                 Text("好友房和 AI 对战不影响竞点。创建好友房时会使用上方当前选择的题库范围。")
             }

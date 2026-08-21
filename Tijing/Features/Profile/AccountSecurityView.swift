@@ -27,7 +27,7 @@ struct AccountSecurityView: View {
                 LabeledContent("绑定邮箱", value: info?.hasEmail == true ? (info?.email ?? "已验证") : "未绑定")
             }
 
-            Section("修改密码") {
+            Section {
                 SecureField("当前密码", text: $passwordCurrent)
                     .textContentType(.password)
                 SecureField("新密码（至少 6 位）", text: $newPassword)
@@ -41,11 +41,13 @@ struct AccountSecurityView: View {
                 }
                 Button("修改密码") { Task { await changePassword() } }
                     .disabled(isBusy || passwordCurrent.count < 4 || newPassword.count < 6 || confirmPassword != newPassword)
+            } header: {
+                Text("修改密码")
             } footer: {
                 Text("修改后其他设备上的旧登录会立即失效，当前 iPhone 会自动换用服务器返回的新 Token。")
             }
 
-            Section(info?.hasEmail == true ? "更换绑定邮箱" : "绑定邮箱") {
+            Section {
                 TextField("新的邮箱地址", text: $email)
                     .keyboardType(.emailAddress)
                     .textInputAutocapitalization(.never)
@@ -67,12 +69,14 @@ struct AccountSecurityView: View {
                     Task { await bindEmail() }
                 }
                 .disabled(isBusy || !emailLooksValid || emailPassword.count < 4 || emailCode.count != 6)
+            } header: {
+                Text(info?.hasEmail == true ? "更换绑定邮箱" : "绑定邮箱")
             } footer: {
                 Text(info?.hasEmail == true ? "只有新邮箱验证成功后才会替换当前邮箱。" : "绑定后可使用邮箱验证码找回密码。")
             }
 
             if info?.hasEmail == true {
-                Section("解绑邮箱") {
+                Section {
                     Text("验证码会发送到当前绑定邮箱 \(info?.email ?? "")。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
@@ -93,6 +97,8 @@ struct AccountSecurityView: View {
                         Task { await unbindEmail() }
                     }
                     .disabled(isBusy || unbindPassword.count < 4 || unbindCode.count != 6)
+                } header: {
+                    Text("解绑邮箱")
                 } footer: {
                     Text("解绑后如需使用邮箱找回密码，可重新绑定邮箱。")
                 }

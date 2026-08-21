@@ -9,6 +9,8 @@ struct RootView: View {
     @State private var presentedBattleRoom: PresentedBattleRoom?
 
     var body: some View {
+        @Bindable var bindableSession = session
+
         TabView(selection: $selectedTab) {
             NavigationStack {
                 HomeView(showingAuth: $showingAuth)
@@ -87,7 +89,7 @@ struct RootView: View {
             selectedTab = .home
             showingAuth = true
         }
-        .sheet(item: BindableInvite(session: session).binding) { invite in
+        .sheet(item: $bindableSession.pendingFriendInvite) { invite in
             FriendInviteSheet(invite: invite) {
                 Task { @MainActor in
                     do {
@@ -157,13 +159,6 @@ private struct AuthenticatedTabGate<Content: View>: View {
             }
             .navigationTitle(title.contains("对战") ? "对战" : "刷题")
         }
-    }
-}
-
-private struct BindableInvite {
-    let session: SessionStore
-    var binding: Binding<FriendBattleInvite?> {
-        Binding(get: { session.pendingFriendInvite }, set: { session.pendingFriendInvite = $0 })
     }
 }
 
