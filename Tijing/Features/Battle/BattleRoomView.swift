@@ -52,8 +52,10 @@ struct BattleRoomView: View {
         .overlay {
             if showRankedEntrance, let state = store.state, state.mode == "quick" {
                 RankedBattleEntranceOverlay(
-                    players: state.players,
+                    me: myPlayer(state),
+                    opponent: opponentPlayer(state),
                     scope: scopeText(state),
+                    total: state.total,
                     reduceMotion: reduceMotion
                 ) {
                     withAnimation(.easeOut(duration: reduceMotion ? 0.12 : 0.24)) {
@@ -614,6 +616,11 @@ struct BattleRoomView: View {
         return state.players.first { $0.id == userID }
     }
 
+    private func opponentPlayer(_ state: BattleState) -> BattlePlayer? {
+        guard let me = myPlayer(state) else { return state.players.dropFirst().first }
+        return state.players.first { $0.id != me.id }
+    }
+
     private func scopeText(_ state: BattleState) -> String {
         if let topic = state.topic, !topic.isEmpty, let subject = state.subject, !subject.isEmpty { return "\(subject) · \(topic)" }
         if let subject = state.subject, !subject.isEmpty { return subject }
@@ -633,100 +640,203 @@ struct BattleRoomView: View {
 
 
 private struct RankedBattleEntranceOverlay: View {
-    let players: [BattlePlayer]
+    let me: BattlePlayer?
+    let opponent: BattlePlayer?
     let scope: String
+    let total: Int
     let reduceMotion: Bool
     let onFinished: () -> Void
 
     @State private var reveal = false
+    @State private var versusPulse = false
     @State private var leaving = false
 
     var body: some View {
-        VStack {
-            HStack(spacing: 12) {
-                player(players.first, leading: true)
+        ZStack {
+            TijingPageBackground()
 
-                VStack(spacing: 2) {
-                    Text("排位已匹配")
+            LinearGradient(
+                colors: [
+                    TijingDesign.indigo.opacity(0.16),
+                    TijingDesign.lilac.opacity(0.10),
+                    TijingDesign.sky.opacity(0.08),
+                    Color.clear
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+
+            Circle()
+                .fill(TijingDesign.indigo.opacity(0.10))
+                .frame(width: 260, height: 260)
+                .blur(radius: 18)
+                .offset(x: reveal ? 150 : 190, y: -250)
+
+            Circle()
+                .fill(TijingDesign.cyan.opacity(0.09))
+                .frame(width: 220, height: 220)
+                .blur(radius: 18)
+                .offset(x: reveal ? -150 : -190, y: 300)
+
+            VStack(spacing: 0) {
+                Spacer(minLength: 24)
+
+                VStack(spacing: 8) {
+                    Label("匹配成功", systemImage: "checkmark.circle.fill")
                         .font(.caption.weight(.semibold))
+                        .foregroundStyle(TijingDesign.mint)
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 7)
+                        .background(TijingDesign.mint.opacity(0.12), in: Capsule())
+
+                    Text("对手已就位")
+                        .font(.system(.title, design: .rounded, weight: .heavy))
+                    Text("看看这一局谁更稳")
+                        .font(.subheadline)
                         .foregroundStyle(.secondary)
-                    Text("VS")
-                        .font(.system(.headline, design: .rounded, weight: .heavy))
-                        .foregroundStyle(TijingDesign.indigo)
-                    Text(scope)
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
                 }
-                .frame(maxWidth: 96)
+                .opacity(reveal ? 1 : 0)
+                .offset(y: reveal ? 0 : -14)
 
-                player(players.dropFirst().first, leading: false)
-            }
-            .padding(.horizontal, 15)
-            .padding(.vertical, 11)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.06))
-            }
-            .shadow(color: Color.black.opacity(0.08), radius: 18, y: 8)
-            .padding(.horizontal, 20)
-            .offset(y: reveal ? 0 : -28)
-            .scaleEffect(reveal ? 1 : 0.96)
-            .opacity(leaving ? 0 : (reveal ? 1 : 0))
+                Spacer(minLength: 26)
 
-            Spacer()
+                HStack(alignment: .center, spacing: 10) {
+                    playerPanel(me, role: "我", tint: TijingDesign.indigo)
+
+                    VStack(spacing: 7) {
+                        Text("VS")
+                            .font(.system(size: 26, weight: .black, design: .rounded))
+                            .foregroundStyle(TijingDesign.indigo)
+                            .scaleEffect(versusPulse ? 1.06 : 0.90)
+                        Circle()
+                            .fill(TijingDesign.indigo.opacity(0.16))
+                            .frame(width: 5, height: 5)
+                    }
+                    .frame(width: 46)
+
+                    playerPanel(opponent, role: "对手", tint: TijingDesign.coral)
+                }
+                .padding(.horizontal, 18)
+                .scaleEffect(reveal ? 1 : 0.92)
+                .opacity(reveal ? 1 : 0)
+
+                Spacer(minLength: 26)
+
+                VStack(spacing: 12) {
+                    HStack(spacing: 8) {
+                        entranceChip(scope, icon: "scope")
+                        entranceChip("\(total) 题", icon: "list.number")
+                        entranceChip("排位赛", icon: "bolt.fill")
+                    }
+
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text("即将开始")
+                            .font(.footnote.weight(.medium))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .opacity(reveal ? 1 : 0)
+                .offset(y: reveal ? 0 : 12)
+
+                Spacer(minLength: 34)
+            }
+            .frame(maxWidth: 620)
+            .padding(.horizontal, 4)
         }
-        .padding(.top, 8)
+        .ignoresSafeArea()
+        .opacity(leaving ? 0 : 1)
+        .scaleEffect(leaving ? 1.025 : 1)
         .allowsHitTesting(false)
         .task {
             if reduceMotion {
                 reveal = true
-                try? await Task.sleep(for: .milliseconds(360))
-                leaving = true
-                try? await Task.sleep(for: .milliseconds(100))
+                versusPulse = true
+                try? await Task.sleep(for: .milliseconds(520))
                 onFinished()
                 return
             }
 
-            withAnimation(.spring(response: 0.46, dampingFraction: 0.78)) {
+            withAnimation(.spring(response: 0.48, dampingFraction: 0.80)) {
                 reveal = true
+                versusPulse = true
             }
             try? await Task.sleep(for: .milliseconds(760))
-            withAnimation(.easeInOut(duration: 0.22)) {
+            withAnimation(.easeInOut(duration: 0.20)) {
                 leaving = true
             }
-            try? await Task.sleep(for: .milliseconds(200))
+            try? await Task.sleep(for: .milliseconds(190))
             onFinished()
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("匹配成功，\(me?.nickname ?? "我") 对战 \(opponent?.nickname ?? "对手")，\(scope)，共 \(total) 题")
     }
 
-    @ViewBuilder
-    private func player(_ player: BattlePlayer?, leading: Bool) -> some View {
-        HStack(spacing: 8) {
-            if !leading { playerText(player) }
-            if let player {
-                RemoteAvatar(urlString: player.avatarURL, name: player.nickname, size: 42)
-                    .overlay { Circle().strokeBorder(Color.white.opacity(0.72), lineWidth: 1.5) }
-            } else {
-                Circle().fill(.secondary.opacity(0.10)).frame(width: 42, height: 42)
+    private func playerPanel(_ player: BattlePlayer?, role: String, tint: Color) -> some View {
+        VStack(spacing: 10) {
+            Text(role)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(tint)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 5)
+                .background(tint.opacity(0.10), in: Capsule())
+
+            ZStack {
+                Circle()
+                    .fill(tint.opacity(0.12))
+                    .frame(width: 82, height: 82)
+                if let player {
+                    RemoteAvatar(urlString: player.avatarURL, name: player.nickname, size: 74)
+                        .overlay {
+                            Circle().strokeBorder(Color.white.opacity(0.78), lineWidth: 2)
+                        }
+                } else {
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 28, weight: .semibold))
+                        .foregroundStyle(tint)
+                }
             }
-            if leading { playerText(player) }
-        }
-        .frame(maxWidth: .infinity, alignment: leading ? .leading : .trailing)
-    }
 
-    private func playerText(_ player: BattlePlayer?) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(player?.nickname ?? "对手")
-                .font(.caption.weight(.semibold))
-                .lineLimit(1)
-            if let rank = player?.rank, !rank.isEmpty {
-                Text(rank)
-                    .font(.caption2)
+            VStack(spacing: 3) {
+                Text(player?.nickname ?? "等待对手")
+                    .font(.headline)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                Text(resolvedRank(player))
+                    .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                Text("\(player?.rating ?? 0) 竞点")
+                    .font(.caption2.weight(.medium).monospacedDigit())
+                    .foregroundStyle(.tertiary)
             }
         }
+        .frame(maxWidth: .infinity, minHeight: 208)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 16)
+        .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .strokeBorder(tint.opacity(0.14), lineWidth: 1)
+        }
+        .shadow(color: Color.black.opacity(0.055), radius: 16, y: 8)
+    }
+
+    private func entranceChip(_ text: String, icon: String) -> some View {
+        Label(text, systemImage: icon)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.72)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 7)
+            .background(.thinMaterial, in: Capsule())
+    }
+
+    private func resolvedRank(_ player: BattlePlayer?) -> String {
+        guard let rank = player?.rank, !rank.isEmpty else { return "未定级" }
+        return rank
     }
 }

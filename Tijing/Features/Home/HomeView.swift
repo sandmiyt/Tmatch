@@ -96,88 +96,145 @@ struct HomeView: View {
     }
 
     private var continueHero: some View {
-        TijingHeroCard(
-            gradient: LinearGradient(
-                colors: [Color(red: 0.10, green: 0.45, blue: 0.66), Color(red: 0.18, green: 0.58, blue: 0.62), Color(red: 0.28, green: 0.48, blue: 0.72)],
+        ZStack(alignment: .topTrailing) {
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .fill(Color(uiColor: .secondarySystemGroupedBackground))
+
+            LinearGradient(
+                colors: [
+                    TijingDesign.sky.opacity(0.34),
+                    TijingDesign.lilac.opacity(0.20),
+                    TijingDesign.sage.opacity(0.10),
+                    Color.clear
+                ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
-        ) {
-            ZStack(alignment: .topTrailing) {
-                Circle()
-                    .fill(.white.opacity(0.10))
-                    .frame(width: 118, height: 118)
-                    .offset(x: 42, y: -48)
-                Circle()
-                    .stroke(.white.opacity(0.11), lineWidth: 1)
-                    .frame(width: 74, height: 74)
-                    .offset(x: 12, y: 12)
 
-                ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .center, spacing: 18) {
-                        livelyHeroCopy
-                        Spacer(minLength: 4)
-                        practiceHeroVisual
-                    }
-                    VStack(alignment: .leading, spacing: 18) {
-                        livelyHeroCopy
-                        practiceHeroVisual
-                    }
+            Circle()
+                .fill(TijingDesign.indigo.opacity(0.10))
+                .frame(width: 150, height: 150)
+                .blur(radius: 8)
+                .offset(
+                    x: continueHeroFloating ? 58 : 72,
+                    y: continueHeroFloating ? -60 : -46
+                )
+
+            Circle()
+                .fill(TijingDesign.mint.opacity(0.08))
+                .frame(width: 92, height: 92)
+                .blur(radius: 6)
+                .offset(
+                    x: continueHeroFloating ? -238 : -226,
+                    y: continueHeroFloating ? 118 : 128
+                )
+
+            TijingDotGrid(opacity: 0.035)
+                .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 18) {
+                livelyHeroCopy
+
+                HStack(spacing: 9) {
+                    heroMetric(
+                        stats?.questions.map(String.init) ?? "—",
+                        "已刷题",
+                        icon: "checkmark.circle.fill",
+                        tint: TijingDesign.mint
+                    )
+
+                    heroMetric(
+                        TijingFormat.percent(stats?.accuracy7d),
+                        "近 7 天正确率",
+                        icon: "scope",
+                        tint: TijingDesign.indigo
+                    )
+
+                    practiceHeroVisual
                 }
             }
-            .foregroundStyle(.white)
+            .padding(20)
         }
+        .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.055))
+        }
+        .shadow(color: Color.black.opacity(0.055), radius: 18, y: 9)
         .onAppear {
             guard !continueHeroFloating, !reduceMotion else { return }
-            withAnimation(.easeInOut(duration: 2.8).repeatForever(autoreverses: true)) {
+            withAnimation(.easeInOut(duration: 3.2).repeatForever(autoreverses: true)) {
                 continueHeroFloating = true
             }
         }
     }
 
     private var livelyHeroCopy: some View {
-        VStack(alignment: .leading, spacing: 11) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
-                TijingStickerIcon(
-                    systemImage: "book.pages.fill",
-                    tint: .white,
-                    background: .white.opacity(0.16),
-                    size: 38,
-                    rotation: -5,
-                    sparkle: false
-                )
-                Text("继续刷题")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.84))
+                Label("继续刷题", systemImage: "book.pages.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(TijingDesign.indigo)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(TijingDesign.indigo.opacity(0.10), in: Capsule())
+
+                if let focus = dailyPlan?.analysis.summary.focus?.subject, !focus.isEmpty {
+                    Text(focus)
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
 
-            Text(dailyPlan?.analysis.summary.focus?.topic ?? dailyPlan?.analysis.summary.focus?.subject ?? "今天继续稳住手感")
-                .font(.system(.title2, design: .rounded, weight: .bold))
-                .lineLimit(2)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(dailyPlan?.analysis.summary.focus?.topic ?? dailyPlan?.analysis.summary.focus?.subject ?? "今天继续稳住手感")
+                    .font(.system(.title2, design: .rounded, weight: .bold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.86)
 
-            Text(dailyPlanSubtitle)
-                .font(.subheadline)
-                .foregroundStyle(.white.opacity(0.76))
-                .lineLimit(2)
-
-            HStack(spacing: 8) {
-                if let total = stats?.questions {
-                    heroMetric("\(total)", "已刷", icon: "checkmark.circle.fill")
-                }
-                heroMetric(TijingFormat.percent(stats?.accuracy7d), "近7天", icon: "chart.line.uptrend.xyaxis")
+                Text(dailyPlanSubtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func heroMetric(_ value: String, _ title: String, icon: String) -> some View {
-        HStack(spacing: 5) {
-            Image(systemName: icon).font(.caption2.weight(.bold))
-            Text(value).font(.caption.weight(.bold)).monospacedDigit()
-            Text(title).font(.caption2).opacity(0.72)
+    private func heroMetric(_ value: String, _ title: String, icon: String, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Image(systemName: icon)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(tint)
+                .frame(width: 28, height: 28)
+                .background(tint.opacity(0.11), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+
+            Spacer(minLength: 0)
+
+            Text(value)
+                .font(.system(.headline, design: .rounded, weight: .bold))
+                .foregroundStyle(.primary)
+                .monospacedDigit()
+                .contentTransition(.numericText())
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+
+            Text(title)
+                .font(.system(size: 10.5, weight: .medium))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
         }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 6)
-        .background(.white.opacity(0.12), in: Capsule())
+        .frame(maxWidth: .infinity, minHeight: 104, alignment: .leading)
+        .padding(11)
+        .background(Color(uiColor: .tertiarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 17, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.045))
+        }
     }
 
     private var practiceHeroVisual: some View {
@@ -188,35 +245,53 @@ struct HomeView: View {
                 topic: dailyPlan?.analysis.summary.focus?.topic
             )
         } label: {
-            ZStack {
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(.white.opacity(0.11))
-                    .frame(width: 110, height: 132)
-                    .rotationEffect(.degrees(continueHeroFloating ? 5 : 7))
-                    .offset(x: 7, y: continueHeroFloating ? -1 : 4)
+            VStack(alignment: .leading, spacing: 7) {
+                HStack {
+                    Image(systemName: "play.fill")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(TijingDesign.indigo)
+                        .frame(width: 28, height: 28)
+                        .background(.white.opacity(0.92), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
 
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(.white.opacity(0.18))
-                    .frame(width: 110, height: 132)
-                    .rotationEffect(.degrees(continueHeroFloating ? -1.5 : -3))
-                    .overlay {
-                        VStack(spacing: 10) {
-                            TijingProgressRing(
-                                progress: (stats?.accuracy7d ?? 0) / 100,
-                                value: TijingFormat.percent(stats?.accuracy7d),
-                                caption: "正确率"
-                            )
-                            HStack(spacing: 5) {
-                                Text("开始下一组").font(.caption.weight(.semibold))
-                                Image(systemName: "arrow.up.right").font(.caption2.bold())
-                            }
-                        }
-                        .padding(10)
-                    }
+                    Spacer(minLength: 0)
+
+                    Image(systemName: "arrow.up.right")
+                        .font(.caption2.bold())
+                        .foregroundStyle(.white.opacity(0.86))
+                        .offset(y: continueHeroFloating ? -2 : 1)
+                }
+
+                Spacer(minLength: 0)
+
+                Text("开始下一组")
+                    .font(.system(.subheadline, design: .rounded, weight: .bold))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.82)
+
+                Text("继续当前设置")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.72))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
             }
-            .frame(width: 126, height: 144)
-            .scaleEffect(continueHeroFloating ? 1.018 : 0.992)
-            .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity, minHeight: 104, alignment: .leading)
+            .padding(11)
+            .background(
+                LinearGradient(
+                    colors: [TijingDesign.indigo, TijingDesign.violet.opacity(0.92)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                in: RoundedRectangle(cornerRadius: 17, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 17, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.14))
+            }
+            .shadow(color: TijingDesign.indigo.opacity(0.15), radius: 10, y: 5)
+            .offset(y: continueHeroFloating ? -1.5 : 1.5)
+            .contentShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
         }
         .buttonStyle(TijingPressableCardStyle())
         .tijingTactileLink()
