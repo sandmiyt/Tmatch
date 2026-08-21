@@ -3,8 +3,11 @@ import SwiftUI
 struct BattleRoomView: View {
     @Environment(SessionStore.self) private var session
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State var store: BattleRoomStore
     @State private var confirmExit = false
+    @State private var showRankedEntrance = false
+    @State private var rankedEntrancePlayed = false
 
     var body: some View {
         ZStack {
@@ -46,6 +49,21 @@ struct BattleRoomView: View {
             }
             }
         }
+        .overlay {
+            if showRankedEntrance, let state = store.state, state.mode == "quick" {
+                RankedBattleEntranceOverlay(
+                    players: state.players,
+                    scope: scopeText(state),
+                    reduceMotion: reduceMotion
+                ) {
+                    withAnimation(.easeOut(duration: reduceMotion ? 0.12 : 0.24)) {
+                        showRankedEntrance = false
+                    }
+                }
+                .transition(.opacity)
+                .zIndex(20)
+            }
+        }
         .navigationTitle("对战")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
@@ -62,7 +80,11 @@ struct BattleRoomView: View {
                 compactBattleHeader(state)
             }
         }
-        .task { await store.connect() }
+        .task {
+            await store.connect()
+            playRankedEntranceIfNeeded()
+        }
+        .onChange(of: store.state?.roomID) { _, _ in playRankedEntranceIfNeeded() }
         .onDisappear { store.disconnect() }
         .confirmationDialog(exitDialogTitle, isPresented: $confirmExit, titleVisibility: .visible) {
             if store.state?.waitingOpponent == true {
@@ -83,44 +105,76 @@ struct BattleRoomView: View {
     }
 
     private func compactBattleHeader(_ state: BattleState) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             if let me = myPlayer(state) {
-                HStack(spacing: 6) {
-                    RemoteAvatar(urlString: me.avatarURL, name: me.nickname, size: 28)
-                    Text("\(me.correct)")
-                        .font(.headline.monospacedDigit())
+                compactPlayer(me, leading: true)
+            }
+
+            Spacer(minLength: 2)
+
+            VStack(spacing: 2) {
+                Text("\(state.questionIndex + 1)/\(state.total)")
+                    .font(.caption2.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(.secondary)
+
+                if let seconds = state.roundSecondsLeft ?? state.secondsLeft {
+                    Label("\(seconds)s", systemImage: "timer")
+                        .font(.subheadline.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(seconds <= 10 ? Color.red : .primary)
+                        .contentTransition(.numericText())
                 }
             }
+            .frame(minWidth: 52)
 
-            Spacer(minLength: 4)
-
-            Text("\(state.questionIndex + 1)/\(state.total)")
-                .font(.caption.weight(.semibold).monospacedDigit())
-                .foregroundStyle(.secondary)
-
-            if let seconds = state.roundSecondsLeft ?? state.secondsLeft {
-                Label("\(seconds)s", systemImage: "timer")
-                    .font(.headline.monospacedDigit())
-                    .foregroundStyle(seconds <= 10 ? Color.red : .primary)
-                    .contentTransition(.numericText())
-            }
-
-            Spacer(minLength: 4)
+            Spacer(minLength: 2)
 
             if let me = myPlayer(state), let opponent = state.players.first(where: { $0.id != me.id }) {
-                HStack(spacing: 6) {
-                    Text("\(opponent.correct)")
-                        .font(.headline.monospacedDigit())
-                    RemoteAvatar(urlString: opponent.avatarURL, name: opponent.nickname, size: 28)
-                }
+                compactPlayer(opponent, leading: false)
             }
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 14)
         .padding(.vertical, 8)
         .background(.regularMaterial)
         .overlay(alignment: .bottom) { Divider() }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("第 \(state.questionIndex + 1) 题，共 \(state.total) 题")
+        .accessibilityLabel(compactScoreAccessibility(state))
+    }
+
+    private func compactPlayer(_ player: BattlePlayer, leading: Bool) -> some View {
+        HStack(spacing: 7) {
+            if !leading { compactPlayerText(player, alignment: .trailing) }
+            RemoteAvatar(urlString: player.avatarURL, name: player.nickname, size: 31)
+            if leading { compactPlayerText(player, alignment: .leading) }
+        }
+        .frame(maxWidth: .infinity, alignment: leading ? .leading : .trailing)
+    }
+
+    private func compactPlayerText(_ player: BattlePlayer, alignment: HorizontalAlignment) -> some View {
+        VStack(alignment: alignment, spacing: 1) {
+            Text(player.nickname)
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+            HStack(spacing: 4) {
+                Text((player.rank?.isEmpty == false ? player.rank : nil) ?? "未定级")
+                    .lineLimit(1)
+                Text("·")
+                Text("已做对 \(player.correct)")
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.68)
+        }
+    }
+
+    private func compactScoreAccessibility(_ state: BattleState) -> String {
+        let players = state.players.map { player in
+            "\(player.nickname)，\(player.rank ?? "未定级")，已做对 \(player.correct) 题"
+        }.joined(separator: "；")
+        return "第 \(state.questionIndex + 1) 题，共 \(state.total) 题；\(players)"
     }
 
     private func scoreHeader(_ state: BattleState) -> some View {
@@ -132,8 +186,14 @@ struct BattleRoomView: View {
                         .font(.subheadline.bold())
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
+                    if let rank = player.rank, !rank.isEmpty {
+                        Text(rank)
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
                     Text("\(player.correct)").font(.title2.bold().monospacedDigit())
-                    Text("答对").font(.caption2).foregroundStyle(.secondary)
+                    Text("已做对").font(.caption2).foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity)
             }
@@ -194,33 +254,54 @@ struct BattleRoomView: View {
             QuestionMediaStrip(urls: question.media?.stem ?? [])
 
             ForEach(options.indices, id: \.self) { index in
-                Button {
-                    Task { await store.answer(index) }
-                } label: {
-                    HStack(alignment: .top, spacing: 12) {
-                        Text(TijingFormat.optionLetter(index))
-                            .font(.subheadline.bold())
-                            .frame(width: 28, height: 28)
-                            .background(.secondary.opacity(0.12), in: Circle())
-                        VStack(alignment: .leading, spacing: 7) {
-                            Text(options[index])
-                                .font(.body)
-                                .fontWeight(.regular)
-                                .lineSpacing(3)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .multilineTextAlignment(.leading)
-                            if let mediaOptions = question.media?.options, index < mediaOptions.count {
-                                QuestionMediaStrip(urls: mediaOptions[index])
-                            }
+                let isExcluded = store.excluded.contains(index)
+                let isLocked = state.myFeedback != nil || store.selected != nil
+
+                HStack(alignment: .top, spacing: 12) {
+                    Text(TijingFormat.optionLetter(index))
+                        .font(.subheadline.bold())
+                        .foregroundStyle(isExcluded ? .secondary : .primary)
+                        .frame(width: 28, height: 28)
+                        .background(.secondary.opacity(isExcluded ? 0.07 : 0.12), in: Circle())
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text(options[index])
+                            .font(.body)
+                            .fontWeight(.regular)
+                            .lineSpacing(3)
+                            .foregroundStyle(isExcluded ? .secondary : .primary)
+                            .strikethrough(isExcluded)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .multilineTextAlignment(.leading)
+                        if let mediaOptions = question.media?.options, index < mediaOptions.count {
+                            QuestionMediaStrip(urls: mediaOptions[index])
+                                .opacity(isExcluded ? 0.48 : 1)
                         }
                     }
-                    .padding(14)
-                    .background(battleOptionBackground(index, state: state), in: RoundedRectangle(cornerRadius: 19, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 19, style: .continuous).stroke(battleOptionBorder(index, state: state), lineWidth: 1))
-                    .shadow(color: state.myFeedback == nil && store.selected == nil ? Color.black.opacity(0.025) : Color.clear, radius: 7, y: 3)
+                    if isExcluded, state.myFeedback == nil {
+                        Image(systemName: "minus.circle.fill")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .transition(.scale.combined(with: .opacity))
+                    }
                 }
-                .buttonStyle(.plain)
-                .disabled(state.myFeedback != nil || store.selected != nil)
+                .padding(14)
+                .background(battleOptionBackground(index, state: state), in: RoundedRectangle(cornerRadius: 19, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 19, style: .continuous).stroke(battleOptionBorder(index, state: state), lineWidth: 1))
+                .shadow(color: state.myFeedback == nil && store.selected == nil && !isExcluded ? Color.black.opacity(0.025) : Color.clear, radius: 7, y: 3)
+                .contentShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
+                .scaleEffect(isExcluded ? 0.992 : 1)
+                .animation(.spring(response: 0.28, dampingFraction: 0.84), value: isExcluded)
+                .onTapGesture {
+                    guard !isLocked, !isExcluded else { return }
+                    Task { await store.answer(index) }
+                }
+                .onLongPressGesture(minimumDuration: 0.42) {
+                    guard state.mode == "quick", !isLocked else { return }
+                    store.toggleExcluded(index)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityHint(state.mode == "quick" ? (isExcluded ? "长按恢复该选项" : "轻点作答，长按排除该选项") : "轻点作答")
             }
 
             if let feedback = state.myFeedback {
@@ -245,6 +326,7 @@ struct BattleRoomView: View {
 
     private func battleOptionBackground(_ index: Int, state: BattleState) -> Color {
         guard let feedback = state.myFeedback else {
+            if store.excluded.contains(index) { return Color.secondary.opacity(0.055) }
             return store.selected == index ? Color.accentColor.opacity(0.10) : Color(uiColor: .secondarySystemGroupedBackground)
         }
         if index == feedback.answer { return Color.green.opacity(0.12) }
@@ -254,6 +336,7 @@ struct BattleRoomView: View {
 
     private func battleOptionBorder(_ index: Int, state: BattleState) -> Color {
         guard let feedback = state.myFeedback else {
+            if store.excluded.contains(index) { return .secondary.opacity(0.14) }
             return store.selected == index ? .accentColor : .secondary.opacity(0.25)
         }
         if index == feedback.answer { return .green }
@@ -375,20 +458,83 @@ struct BattleRoomView: View {
             }
 
             if !review.weakSubjects.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("本局薄弱模块").font(.subheadline.bold())
-                    ForEach(review.weakSubjects) { item in
-                        HStack {
-                            Text(item.subject)
-                            Spacer()
-                            Text("\(item.wrong)/\(item.total) 错").font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "scope")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(TijingDesign.coral)
+                            .frame(width: 28, height: 28)
+                            .background(TijingDesign.rose.opacity(0.28), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("本局薄弱模块")
+                                .font(.subheadline.bold())
+                            Text("按本局错题占比整理")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
                         }
+                    }
+
+                    ForEach(review.weakSubjects) { item in
+                        battleWeakSubjectRow(item)
                     }
                 }
             }
         }
         .padding(16)
         .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    private func battleWeakSubjectRow(_ item: BattleReviewWeakSubject) -> some View {
+        let ratio = item.total > 0 ? min(max(Double(item.wrong) / Double(item.total), 0), 1) : 0
+        let rate = item.wrongRate ?? Int((ratio * 100).rounded())
+        let tint: Color = rate >= 67 ? TijingDesign.coral : (rate >= 34 ? TijingDesign.amber : TijingDesign.indigo)
+        let status = rate >= 67 ? "优先回看" : (rate >= 34 ? "需要巩固" : "轻度失分")
+
+        return VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 10) {
+                Image(systemName: battleWeakSubjectIcon(item.subject))
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(tint)
+                    .frame(width: 32, height: 32)
+                    .background(tint.opacity(0.11), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.subject)
+                        .font(.subheadline.weight(.semibold))
+                    Text("\(item.wrong) 错 · 共 \(item.total) 题 · \(status)")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 8)
+
+                Text("\(rate)%")
+                    .font(.caption.weight(.bold).monospacedDigit())
+                    .foregroundStyle(tint)
+            }
+
+            ProgressView(value: ratio)
+                .tint(tint)
+                .scaleEffect(x: 1, y: 0.78, anchor: .center)
+        }
+        .padding(11)
+        .background(Color(uiColor: .tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(tint.opacity(0.08))
+        }
+    }
+
+    private func battleWeakSubjectIcon(_ name: String) -> String {
+        if name.contains("法律") { return "building.columns.fill" }
+        if name.contains("政治") { return "flag.fill" }
+        if name.contains("经济") { return "chart.line.uptrend.xyaxis" }
+        if name.contains("公文") { return "doc.text.fill" }
+        if name.contains("数量") { return "function" }
+        if name.contains("判断") { return "square.grid.2x2.fill" }
+        if name.contains("资料") { return "chart.bar.fill" }
+        if name.contains("科技") || name.contains("地理") { return "globe.asia.australia.fill" }
+        return "book.closed.fill"
     }
 
     private func reviewMetric(_ value: String, _ title: String, _ detail: String, icon: String) -> some View {
@@ -418,6 +564,14 @@ struct BattleRoomView: View {
         return round.label.flatMap { $0.isEmpty ? nil : $0 } ?? "关键回合"
     }
 
+    private func playRankedEntranceIfNeeded() {
+        guard !rankedEntrancePlayed, let state = store.state else { return }
+        guard state.mode == "quick", state.waitingOpponent != true, !state.finished, state.players.count >= 2 else { return }
+        rankedEntrancePlayed = true
+        showRankedEntrance = true
+        Haptics.medium()
+    }
+
     private func myPlayer(_ state: BattleState) -> BattlePlayer? {
         guard let userID = session.user?.id else { return state.players.first }
         return state.players.first { $0.id == userID }
@@ -437,5 +591,105 @@ struct BattleRoomView: View {
     }
     private func outcomeColor(_ outcome: String?) -> Color {
         switch outcome { case "win": .yellow; case "loss": .secondary; default: .accentColor }
+    }
+}
+
+
+private struct RankedBattleEntranceOverlay: View {
+    let players: [BattlePlayer]
+    let scope: String
+    let reduceMotion: Bool
+    let onFinished: () -> Void
+
+    @State private var reveal = false
+    @State private var leaving = false
+
+    var body: some View {
+        VStack {
+            HStack(spacing: 12) {
+                player(players.first, leading: true)
+
+                VStack(spacing: 2) {
+                    Text("排位已匹配")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Text("VS")
+                        .font(.system(.headline, design: .rounded, weight: .heavy))
+                        .foregroundStyle(TijingDesign.indigo)
+                    Text(scope)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: 96)
+
+                player(players.dropFirst().first, leading: false)
+            }
+            .padding(.horizontal, 15)
+            .padding(.vertical, 11)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.06))
+            }
+            .shadow(color: Color.black.opacity(0.08), radius: 18, y: 8)
+            .padding(.horizontal, 20)
+            .offset(y: reveal ? 0 : -28)
+            .scaleEffect(reveal ? 1 : 0.96)
+            .opacity(leaving ? 0 : (reveal ? 1 : 0))
+
+            Spacer()
+        }
+        .padding(.top, 8)
+        .allowsHitTesting(false)
+        .task {
+            if reduceMotion {
+                reveal = true
+                try? await Task.sleep(for: .milliseconds(360))
+                leaving = true
+                try? await Task.sleep(for: .milliseconds(100))
+                onFinished()
+                return
+            }
+
+            withAnimation(.spring(response: 0.46, dampingFraction: 0.78)) {
+                reveal = true
+            }
+            try? await Task.sleep(for: .milliseconds(760))
+            withAnimation(.easeInOut(duration: 0.22)) {
+                leaving = true
+            }
+            try? await Task.sleep(for: .milliseconds(200))
+            onFinished()
+        }
+    }
+
+    @ViewBuilder
+    private func player(_ player: BattlePlayer?, leading: Bool) -> some View {
+        HStack(spacing: 8) {
+            if !leading { playerText(player) }
+            if let player {
+                RemoteAvatar(urlString: player.avatarURL, name: player.nickname, size: 42)
+                    .overlay { Circle().strokeBorder(Color.white.opacity(0.72), lineWidth: 1.5) }
+            } else {
+                Circle().fill(.secondary.opacity(0.10)).frame(width: 42, height: 42)
+            }
+            if leading { playerText(player) }
+        }
+        .frame(maxWidth: .infinity, alignment: leading ? .leading : .trailing)
+    }
+
+    private func playerText(_ player: BattlePlayer?) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(player?.nickname ?? "对手")
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+            if let rank = player?.rank, !rank.isEmpty {
+                Text(rank)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
     }
 }

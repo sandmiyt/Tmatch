@@ -11,6 +11,7 @@ final class BattleRoomStore {
     var networkHint: String?
     var isConnecting = false
     var selected: Int?
+    var excluded: Set<Int> = []
 
     private let api: APIClient
     private let token: String
@@ -61,8 +62,18 @@ final class BattleRoomStore {
         socket = nil
     }
 
+    func toggleExcluded(_ index: Int) {
+        guard let state, state.mode == "quick", !state.finished, state.myFeedback == nil, selected == nil else { return }
+        if excluded.contains(index) {
+            excluded.remove(index)
+        } else {
+            excluded.insert(index)
+        }
+        Haptics.light()
+    }
+
     func answer(_ index: Int) async {
-        guard let state, !state.finished, state.myFeedback == nil, selected == nil else { return }
+        guard let state, !state.finished, state.myFeedback == nil, selected == nil, !excluded.contains(index) else { return }
         selected = index
         error = nil
         networkHint = nil
@@ -205,7 +216,10 @@ final class BattleRoomStore {
         let wasFinished = state?.finished == true
         state = newState
         error = nil
-        if oldQuestion != newState.questionIndex { selected = nil }
+        if oldQuestion != newState.questionIndex {
+            selected = nil
+            excluded.removeAll()
+        }
         if oldFeedback == nil, let feedback = newState.myFeedback {
             feedback.correct ? Haptics.success() : Haptics.error()
         }

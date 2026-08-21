@@ -168,16 +168,35 @@ struct BattleLobbyView: View {
                     Text("题库")
                         .font(.body.weight(.medium))
                     Spacer()
-                    Picker("题库", selection: $subject) {
-                        Text("全部题库").tag("")
-                        ForEach(catalog) { item in
-                            Text("\(item.name)（\(item.count)题）").tag(item.name)
+                    Menu {
+                        Button {
+                            subject = ""
+                            topic = ""
+                        } label: {
+                            Label("全部题库", systemImage: subject.isEmpty ? "checkmark" : "books.vertical")
                         }
+                        ForEach(catalog) { item in
+                            Button {
+                                subject = item.name
+                                topic = ""
+                            } label: {
+                                HStack {
+                                    Text("\(item.name) · \(item.count)题")
+                                    if subject == item.name { Image(systemName: "checkmark") }
+                                }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text(subject.isEmpty ? "全部题库" : subject)
+                                .lineLimit(1)
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.caption2.weight(.bold))
+                        }
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
                     }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
                     .disabled(matching || catalogLoading)
-                    .onChange(of: subject) { _, _ in topic = "" }
                 }
                 .padding(16)
 
@@ -191,14 +210,32 @@ struct BattleLobbyView: View {
                     Text("章节")
                         .font(.body.weight(.medium))
                     Spacer()
-                    Picker("章节", selection: $topic) {
-                        Text(subject.isEmpty ? "先选择题库" : "全部章节").tag("")
-                        ForEach(selectedSubject?.topics.filter { $0.count > 0 } ?? []) { item in
-                            Text("\(item.topic)（\(item.count)题）").tag(item.topic)
+                    Menu {
+                        Button {
+                            topic = ""
+                        } label: {
+                            Label("全部章节", systemImage: topic.isEmpty ? "checkmark" : "square.grid.2x2")
                         }
+                        ForEach(selectedSubject?.topics.filter { $0.count > 0 } ?? []) { item in
+                            Button {
+                                topic = item.topic
+                            } label: {
+                                HStack {
+                                    Text("\(item.topic) · \(item.count)题")
+                                    if topic == item.topic { Image(systemName: "checkmark") }
+                                }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text(subject.isEmpty ? "先选择题库" : (topic.isEmpty ? "全部章节" : topic))
+                                .lineLimit(1)
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.caption2.weight(.bold))
+                        }
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(subject.isEmpty ? Color.secondary : Color.primary)
                     }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
                     .disabled(subject.isEmpty || matching || catalogLoading)
                 }
                 .padding(16)
