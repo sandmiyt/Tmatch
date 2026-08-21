@@ -163,7 +163,7 @@ struct HomeView: View {
                 .lineLimit(2)
 
             HStack(spacing: 8) {
-                if let total = stats?.total {
+                if let total = stats?.questions {
                     heroMetric("\(total)", "已刷", icon: "checkmark.circle.fill")
                 }
                 heroMetric(TijingFormat.percent(stats?.accuracy7d), "近7天", icon: "chart.line.uptrend.xyaxis")
@@ -197,7 +197,7 @@ struct HomeView: View {
                 .overlay {
                     VStack(spacing: 10) {
                         TijingProgressRing(
-                            progress: stats.map { Double($0.accuracy7d) / 100 } ?? 0,
+                            progress: (stats?.accuracy7d ?? 0) / 100,
                             value: TijingFormat.percent(stats?.accuracy7d),
                             caption: "正确率"
                         )
@@ -262,7 +262,7 @@ struct HomeView: View {
                 )
 
                 TijingMetricTile(
-                    value: stats.map { "\($0.questions)" } ?? "—",
+                    value: stats?.questions.map(String.init) ?? "—",
                     title: "累计刷题",
                     systemImage: "checkmark.circle.fill",
                     tint: .accentColor
@@ -272,7 +272,7 @@ struct HomeView: View {
                     DirectPracticeLauncherView(mode: .wrong)
                 } label: {
                     TijingMetricTile(
-                        value: stats.map { "\($0.wrong)" } ?? "—",
+                        value: stats?.wrong.map(String.init) ?? "—",
                         title: "错题待复习",
                         systemImage: "arrow.counterclockwise.circle.fill",
                         tint: TijingDesign.coral
@@ -285,7 +285,7 @@ struct HomeView: View {
                     DirectPracticeLauncherView(mode: .favorite)
                 } label: {
                     TijingMetricTile(
-                        value: stats.map { "\($0.favorites)" } ?? "—",
+                        value: stats?.favorites.map(String.init) ?? "—",
                         title: "已收藏",
                         systemImage: "star.fill",
                         tint: TijingDesign.amber
