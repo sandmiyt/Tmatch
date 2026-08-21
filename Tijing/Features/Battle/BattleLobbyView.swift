@@ -403,10 +403,12 @@ struct BattleLobbyView: View {
                     Haptics.success()
                     return
                 }
+                // 不依赖服务端整数秒刷新，避免 iOS 倒计时出现 2 秒一跳。
+                // 服务端 waitSeconds 仍用于匹配阶段判断，本地只负责流畅展示。
                 let serverWaited = response.waitSeconds ?? 0
-                let localWaited = matchStartedAt.map { max(0, Int(Date().timeIntervalSince($0))) } ?? serverWaited
-                matchWaitSeconds = max(serverWaited, localWaited)
-                let waited = matchWaitSeconds
+                let localWaited = matchStartedAt.map { Int(Date().timeIntervalSince($0)) } ?? serverWaited
+                let waited = max(serverWaited, localWaited)
+                matchWaitSeconds = waited
                 let nextStage = response.matchStage ?? "exact"
                 if nextStage != lastMatchStage {
                     lastMatchStage = nextStage
@@ -428,7 +430,8 @@ struct BattleLobbyView: View {
             } catch {
                 matchStatus = "网络有些波动，正在继续匹配…"
             }
-            try? await Task.sleep(for: .milliseconds(1000))
+            // 匹配轮询保持高响应，避免 iOS 与网页端错过同一轮匹配。
+            try? await Task.sleep(for: .milliseconds(500))
         }
     }
 
