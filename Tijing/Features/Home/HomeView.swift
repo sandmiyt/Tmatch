@@ -96,47 +96,37 @@ struct HomeView: View {
     }
 
     private var continueHero: some View {
-        NavigationLink {
-            DirectPracticeLauncherView(
-                mode: .random,
-                subject: dailyPlan?.analysis.summary.focus?.subject,
-                topic: dailyPlan?.analysis.summary.focus?.topic
+        TijingHeroCard(
+            gradient: LinearGradient(
+                colors: [Color(red: 0.10, green: 0.45, blue: 0.66), Color(red: 0.18, green: 0.58, blue: 0.62), Color(red: 0.28, green: 0.48, blue: 0.72)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
             )
-        } label: {
-            TijingHeroCard(
-                gradient: LinearGradient(
-                    colors: [Color(red: 0.10, green: 0.45, blue: 0.66), Color(red: 0.18, green: 0.58, blue: 0.62), Color(red: 0.28, green: 0.48, blue: 0.72)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            ) {
-                ZStack(alignment: .topTrailing) {
-                    Circle()
-                        .fill(.white.opacity(0.10))
-                        .frame(width: 118, height: 118)
-                        .offset(x: 42, y: -48)
-                    Circle()
-                        .stroke(.white.opacity(0.11), lineWidth: 1)
-                        .frame(width: 74, height: 74)
-                        .offset(x: 12, y: 12)
+        ) {
+            ZStack(alignment: .topTrailing) {
+                Circle()
+                    .fill(.white.opacity(0.10))
+                    .frame(width: 118, height: 118)
+                    .offset(x: 42, y: -48)
+                Circle()
+                    .stroke(.white.opacity(0.11), lineWidth: 1)
+                    .frame(width: 74, height: 74)
+                    .offset(x: 12, y: 12)
 
-                    ViewThatFits(in: .horizontal) {
-                        HStack(alignment: .center, spacing: 18) {
-                            livelyHeroCopy
-                            Spacer(minLength: 4)
-                            practiceHeroVisual
-                        }
-                        VStack(alignment: .leading, spacing: 18) {
-                            livelyHeroCopy
-                            practiceHeroVisual
-                        }
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .center, spacing: 18) {
+                        livelyHeroCopy
+                        Spacer(minLength: 4)
+                        practiceHeroVisual
+                    }
+                    VStack(alignment: .leading, spacing: 18) {
+                        livelyHeroCopy
+                        practiceHeroVisual
                     }
                 }
-                .foregroundStyle(.white)
             }
+            .foregroundStyle(.white)
         }
-        .buttonStyle(TijingPressableCardStyle())
-        .tijingTactileLink()
         .onAppear {
             guard !continueHeroFloating, !reduceMotion else { return }
             withAnimation(.easeInOut(duration: 2.8).repeatForever(autoreverses: true)) {
@@ -191,34 +181,47 @@ struct HomeView: View {
     }
 
     private var practiceHeroVisual: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(.white.opacity(0.11))
-                .frame(width: 110, height: 132)
-                .rotationEffect(.degrees(continueHeroFloating ? 5 : 7))
-                .offset(x: 7, y: continueHeroFloating ? -1 : 4)
+        NavigationLink {
+            DirectPracticeLauncherView(
+                mode: .random,
+                subject: dailyPlan?.analysis.summary.focus?.subject,
+                topic: dailyPlan?.analysis.summary.focus?.topic
+            )
+        } label: {
+            ZStack {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(.white.opacity(0.11))
+                    .frame(width: 110, height: 132)
+                    .rotationEffect(.degrees(continueHeroFloating ? 5 : 7))
+                    .offset(x: 7, y: continueHeroFloating ? -1 : 4)
 
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(.white.opacity(0.18))
-                .frame(width: 110, height: 132)
-                .rotationEffect(.degrees(continueHeroFloating ? -1.5 : -3))
-                .overlay {
-                    VStack(spacing: 10) {
-                        TijingProgressRing(
-                            progress: (stats?.accuracy7d ?? 0) / 100,
-                            value: TijingFormat.percent(stats?.accuracy7d),
-                            caption: "正确率"
-                        )
-                        HStack(spacing: 5) {
-                            Text("开始下一组").font(.caption.weight(.semibold))
-                            Image(systemName: "arrow.up.right").font(.caption2.bold())
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(.white.opacity(0.18))
+                    .frame(width: 110, height: 132)
+                    .rotationEffect(.degrees(continueHeroFloating ? -1.5 : -3))
+                    .overlay {
+                        VStack(spacing: 10) {
+                            TijingProgressRing(
+                                progress: (stats?.accuracy7d ?? 0) / 100,
+                                value: TijingFormat.percent(stats?.accuracy7d),
+                                caption: "正确率"
+                            )
+                            HStack(spacing: 5) {
+                                Text("开始下一组").font(.caption.weight(.semibold))
+                                Image(systemName: "arrow.up.right").font(.caption2.bold())
+                            }
                         }
+                        .padding(10)
                     }
-                    .padding(10)
-                }
+            }
+            .frame(width: 126, height: 144)
+            .scaleEffect(continueHeroFloating ? 1.018 : 0.992)
+            .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         }
-        .frame(width: 126, height: 144)
-        .scaleEffect(continueHeroFloating ? 1.018 : 0.992)
+        .buttonStyle(TijingPressableCardStyle())
+        .tijingTactileLink()
+        .accessibilityLabel("开始下一组")
+        .accessibilityHint("进入下一组刷题")
     }
 
     private var todaySection: some View {
