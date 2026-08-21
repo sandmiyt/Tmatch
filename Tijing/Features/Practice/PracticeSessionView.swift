@@ -3,7 +3,6 @@ import SwiftUI
 struct PracticeSessionView: View {
     @Environment(\.dismiss) private var dismiss
     @State var store: PracticeSessionStore
-    @State private var confirmQuit = false
     @State private var confirmSubmit = false
     @State private var showAnswerSheet = false
     @State private var correctionTarget: CorrectionTarget?
@@ -35,9 +34,11 @@ struct PracticeSessionView: View {
             if !store.questions.isEmpty {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
-                        confirmQuit = true
+                        store.saveProgressForExit()
+                        Haptics.selection()
+                        dismiss()
                     } label: { Image(systemName: "xmark") }
-                    .accessibilityLabel("退出本组")
+                    .accessibilityLabel("退出本组并保存进度")
                 }
                 ToolbarItem(placement: .principal) {
                     Text(store.progressText).font(.headline.monospacedDigit())
@@ -50,13 +51,6 @@ struct PracticeSessionView: View {
             }
         }
         .task { await store.load() }
-        .confirmationDialog("退出当前题组？", isPresented: $confirmQuit, titleVisibility: .visible) {
-            Button("保留进度并退出") { dismiss() }
-            Button("放弃本组进度", role: .destructive) { store.clearResume(); dismiss() }
-            Button("继续答题", role: .cancel) {}
-        } message: {
-            Text("保留进度后，下次进入同一练习范围会继续当前题组，不受后来修改练习设置影响。")
-        }
         .confirmationDialog("确认交卷？", isPresented: $confirmSubmit, titleVisibility: .visible) {
             Button("确认交卷") { Task { await store.submitBatch() } }
             Button("继续答题", role: .cancel) {}
@@ -552,16 +546,39 @@ private struct FeedbackCard: View {
                 Text("考点：\(keypoints.joined(separator: " · "))")
                     .font(.footnote).foregroundStyle(.secondary)
             }
-            HStack(spacing: 14) {
-                if let ratio = feedback.correctRatio { Label("正确率 \(TijingFormat.percent(ratio))", systemImage: "chart.bar") }
-                if let elapsed = feedback.elapsedMS { Label(TijingFormat.duration(milliseconds: elapsed), systemImage: "timer") }
+            VStack(alignment: .leading, spacing: 9) {
+                HStack(spacing: 14) {
+                    if let ratio = feedback.correctRatio ?? question.correctRatio {
+                        Label("全站正确率 \(TijingFormat.percent(ratio))", systemImage: "chart.bar.fill")
+                    }
+                    if let elapsed = feedback.elapsedMS {
+                        Label(TijingFormat.duration(milliseconds: elapsed), systemImage: "timer")
+                    }
+                }
+
+                if let source = displaySource {
+                    Label {
+                        Text("题目来源：\(source)")
+                            .fixedSize(horizontal: false, vertical: true)
+                    } icon: {
+                        Image(systemName: "doc.text.fill")
+                    }
+                }
             }
-            .font(.caption).foregroundStyle(.secondary)
+            .font(.caption)
+            .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(17)
         .background((feedback.correct ? TijingDesign.sage : TijingDesign.rose).opacity(0.24), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay { RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder((feedback.correct ? TijingDesign.mint : TijingDesign.coral).opacity(0.18)) }
+    }
+
+    private var displaySource: String? {
+        let candidates = [feedback.sourceDetail, question.sourceDetail, question.source, question.exam]
+        return candidates
+            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .first { !$0.isEmpty }
     }
 
     private func answerLetters(_ values: [Int]) -> String {

@@ -91,7 +91,7 @@ final class PracticeSessionStore {
         isLoading = true; error = nil
         defer { isLoading = false }
         let key = resumeKey
-        let saved = mode == .smartReview ? nil : PracticeResumeStore.load(key: key)
+        let saved = PracticeResumeStore.load(key: key)
         if let saved, !saved.questions.isEmpty, mode != .wrong {
             restore(saved)
             return
@@ -342,6 +342,14 @@ final class PracticeSessionStore {
         } catch { self.error = error.localizedDescription }
     }
 
+    func saveProgressForExit() {
+        if let question = currentQuestion {
+            let key = String(question.id)
+            elapsedByQuestion[key] = max(elapsedByQuestion[key] ?? 0, currentElapsedMS())
+        }
+        saveResume()
+    }
+
     func clearResume() { PracticeResumeStore.clear(key: resumeKey) }
 
     private func advanceAfterDeferredAnswer() async {
@@ -356,7 +364,7 @@ final class PracticeSessionStore {
     private func currentElapsedMS() -> Int { max(0, Int(Date().timeIntervalSince(startedAt) * 1000)) }
 
     private func saveResume() {
-        guard !questions.isEmpty, mode != .smartReview, batchResult == nil else { return }
+        guard !questions.isEmpty, batchResult == nil else { return }
         PracticeResumeStore.save(PracticeResumeSnapshot(savedAt: Date(), mode: mode, subject: subject, topic: topic, settings: settings, questions: questions, index: index, picks: picks, feedback: feedback, excluded: excluded, elapsed: elapsedByQuestion), key: resumeKey)
     }
 
