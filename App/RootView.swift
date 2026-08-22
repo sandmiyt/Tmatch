@@ -3,6 +3,7 @@ import Combine
 
 struct RootView: View {
     @Environment(SessionStore.self) private var session
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTab: AppTab = .home
     @State private var showingAuth = false
@@ -15,7 +16,7 @@ struct RootView: View {
             NavigationStack {
                 HomeView(showingAuth: $showingAuth)
             }
-            .tabItem { Label("首页", systemImage: "house") }
+            .tabItem { Label("首页", systemImage: "house.fill") }
             .tag(AppTab.home)
 
             NavigationStack {
@@ -29,7 +30,7 @@ struct RootView: View {
                     showingAuth = true
                 }
             }
-            .tabItem { Label("刷题", systemImage: "book.pages") }
+            .tabItem { Label("刷题", systemImage: "book.pages.fill") }
             .tag(AppTab.practice)
 
             NavigationStack {
@@ -43,23 +44,28 @@ struct RootView: View {
                     showingAuth = true
                 }
             }
-            .tabItem { Label("对战", systemImage: "bolt.horizontal.circle") }
+            .tabItem { Label("对战", systemImage: "bolt.horizontal.circle.fill") }
             .tag(AppTab.battle)
 
             NavigationStack {
                 RankingView()
             }
-            .tabItem { Label("排行", systemImage: "trophy") }
+            .tabItem { Label("排行", systemImage: "trophy.fill") }
             .tag(AppTab.ranking)
 
             NavigationStack {
                 ProfileView(showingAuth: $showingAuth)
             }
-            .tabItem { Label("我的", systemImage: "person.crop.circle") }
+            .tabItem { Label("我的", systemImage: "person.crop.circle.fill") }
             .badge(session.unreadNotifications)
             .tag(AppTab.profile)
         }
         .tint(.accentColor)
+        // 参考 Gallery115 的底部导航栏：使用系统材质、固定可见背景，
+        // 让 TabBar 与 iOS 原生应用保持一致的悬浮玻璃质感。
+        .toolbarBackground(.ultraThinMaterial, for: .tabBar)
+        .toolbarBackground(.visible, for: .tabBar)
+        .toolbarColorScheme(colorScheme, for: .tabBar)
         .sensoryFeedback(.selection, trigger: selectedTab)
         .onAppear { Haptics.prepare() }
         .sheet(isPresented: $showingAuth) {
