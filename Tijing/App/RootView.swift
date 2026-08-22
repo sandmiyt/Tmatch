@@ -4,6 +4,7 @@ import Combine
 struct RootView: View {
     @Environment(SessionStore.self) private var session
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.colorScheme) private var colorScheme
     @State private var selectedTab: AppTab = .home
     @State private var showingAuth = false
     @State private var presentedBattleRoom: PresentedBattleRoom?
@@ -62,19 +63,10 @@ struct RootView: View {
             .badge(session.unreadNotifications)
             .tag(AppTab.profile)
             }
-            .toolbar(.hidden, for: .tabBar)
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                if !tabBarHidden && !showingFirstLaunchIntro {
-                    TijingFloatingTabBar(
-                        selection: $selectedTab,
-                        unread: session.unreadNotifications
-                    )
-                    .padding(.horizontal, 14)
-                    .padding(.top, 8)
-                    .padding(.bottom, 8)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-            }
+            .toolbar((tabBarHidden || showingFirstLaunchIntro) ? .hidden : .visible, for: .tabBar)
+            .toolbarBackground(.ultraThinMaterial, for: .tabBar)
+            .toolbarBackground(.visible, for: .tabBar)
+            .toolbarColorScheme(colorScheme, for: .tabBar)
             .onPreferenceChange(TijingTabBarHiddenPreferenceKey.self) { hidden in
                 withAnimation(.spring(response: 0.40, dampingFraction: 0.88)) {
                     tabBarHidden = hidden
@@ -417,66 +409,6 @@ private struct TijingTabBarHiddenPreferenceKey: PreferenceKey {
 extension View {
     func tijingTabBarHidden(_ hidden: Bool = true) -> some View {
         preference(key: TijingTabBarHiddenPreferenceKey.self, value: hidden)
-    }
-}
-
-private struct TijingFloatingTabBar: View {
-    @Binding var selection: AppTab
-    let unread: Int
-
-    var body: some View {
-        HStack(spacing: 4) {
-            ForEach(AppTab.allCases, id: \.self) { tab in
-                Button {
-                    guard selection != tab else { return }
-                    withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) { selection = tab }
-                } label: {
-                    VStack(spacing: 4) {
-                        ZStack(alignment: .topTrailing) {
-                            Image(systemName: selection == tab ? tab.selectedIcon : tab.icon)
-                                .font(.system(size: 18, weight: selection == tab ? .semibold : .medium))
-                                .symbolRenderingMode(.hierarchical)
-                                .frame(height: 22)
-                                .contentTransition(.symbolEffect(.replace))
-                            if tab == .profile, unread > 0 {
-                                Text(unread > 99 ? "99+" : "\(unread)")
-                                    .font(.system(size: 7, weight: .bold))
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 3)
-                                    .frame(minWidth: 14, minHeight: 14)
-                                    .background(.red, in: Capsule())
-                                    .offset(x: 9, y: -6)
-                            }
-                        }
-                        Text(tab.title)
-                            .font(.system(size: 10.5, weight: selection == tab ? .semibold : .medium))
-                            .lineLimit(1)
-                    }
-                    .foregroundStyle(selection == tab ? Color.accentColor : Color.secondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
-                    .background {
-                        if selection == tab {
-                            Capsule()
-                                .fill(Color.accentColor.opacity(0.10))
-                                .padding(.horizontal, 3)
-                                .transition(.scale(scale: 0.82).combined(with: .opacity))
-                        }
-                    }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(tab.title)
-                .accessibilityAddTraits(selection == tab ? .isSelected : [])
-            }
-        }
-        .padding(5)
-        .background(.ultraThinMaterial, in: Capsule())
-        .overlay {
-            Capsule()
-                .strokeBorder(Color.white.opacity(0.26), lineWidth: 0.8)
-        }
-        .shadow(color: Color.black.opacity(0.12), radius: 18, y: 7)
     }
 }
 
