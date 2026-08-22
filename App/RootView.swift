@@ -3,20 +3,22 @@ import Combine
 
 struct RootView: View {
     @Environment(SessionStore.self) private var session
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTab: AppTab = .home
     @State private var showingAuth = false
     @State private var presentedBattleRoom: PresentedBattleRoom?
+    @State private var showingFirstLaunchIntro = true
+    @State private var tabBarHidden = false
 
     var body: some View {
         @Bindable var bindableSession = session
 
-        TabView(selection: $selectedTab) {
+        ZStack {
+            TabView(selection: $selectedTab) {
             NavigationStack {
                 HomeView(showingAuth: $showingAuth)
             }
-            .tabItem { Label("首页", systemImage: "house.fill") }
+            .tabItem { Label("首页", systemImage: selectedTab == .home ? "house.fill" : "house") }
             .tag(AppTab.home)
 
             NavigationStack {
@@ -30,7 +32,7 @@ struct RootView: View {
                     showingAuth = true
                 }
             }
-            .tabItem { Label("刷题", systemImage: "book.pages.fill") }
+            .tabItem { Label("刷题", systemImage: selectedTab == .practice ? "book.pages.fill" : "book.pages") }
             .tag(AppTab.practice)
 
             NavigationStack {
@@ -44,28 +46,45 @@ struct RootView: View {
                     showingAuth = true
                 }
             }
-            .tabItem { Label("对战", systemImage: "bolt.horizontal.circle.fill") }
+            .tabItem { Label("对战", systemImage: selectedTab == .battle ? "bolt.horizontal.circle.fill" : "bolt.horizontal.circle") }
             .tag(AppTab.battle)
 
             NavigationStack {
                 RankingView()
             }
-            .tabItem { Label("排行", systemImage: "trophy.fill") }
+            .tabItem { Label("排行", systemImage: selectedTab == .ranking ? "trophy.fill" : "trophy") }
             .tag(AppTab.ranking)
 
             NavigationStack {
                 ProfileView(showingAuth: $showingAuth)
             }
-            .tabItem { Label("我的", systemImage: "person.crop.circle.fill") }
+            .tabItem { Label("我的", systemImage: selectedTab == .profile ? "person.crop.circle.fill" : "person.crop.circle") }
             .badge(session.unreadNotifications)
             .tag(AppTab.profile)
+            }
+            .toolbar((tabBarHidden || showingFirstLaunchIntro) ? .hidden : .visible, for: .tabBar)
+            .toolbarBackground(.regularMaterial, for: .tabBar)
+            .toolbarBackground(.visible, for: .tabBar)
+            .onPreferenceChange(TijingTabBarHiddenPreferenceKey.self) { hidden in
+                withAnimation(.spring(response: 0.40, dampingFraction: 0.88)) {
+                    tabBarHidden = hidden
+                }
+            }
+            .scaleEffect(showingFirstLaunchIntro ? 1.012 : 1)
+            .opacity(showingFirstLaunchIntro ? 0.94 : 1)
+            .animation(.easeOut(duration: 0.34), value: showingFirstLaunchIntro)
+
+            if showingFirstLaunchIntro {
+                FirstLaunchIntroView {
+                    finishFirstLaunchIntro()
+                }
+                .transition(.opacity)
+                .zIndex(100)
+            }
         }
         .tint(.accentColor)
-        // 参考 Gallery115 的底部导航栏：使用系统材质、固定可见背景，
-        // 让 TabBar 与 iOS 原生应用保持一致的悬浮玻璃质感。
-        .toolbarBackground(.ultraThinMaterial, for: .tabBar)
-        .toolbarBackground(.visible, for: .tabBar)
-        .toolbarColorScheme(colorScheme, for: .tabBar)
+        .animation(.spring(response: 0.42, dampingFraction: 0.86), value: tabBarHidden)
+        .animation(.spring(response: 0.42, dampingFraction: 0.86), value: showingFirstLaunchIntro)
         .sensoryFeedback(.selection, trigger: selectedTab)
         .onAppear { Haptics.prepare() }
         .sheet(isPresented: $showingAuth) {
@@ -73,7 +92,7 @@ struct RootView: View {
                 .presentationDragIndicator(.visible)
         }
         .overlay(alignment: .top) {
-            if session.isBootstrapping {
+            if !showingFirstLaunchIntro && session.isBootstrapping && session.user == nil {
                 ProgressView()
                     .padding(.horizontal, 18)
                     .padding(.vertical, 10)
@@ -119,10 +138,337 @@ struct RootView: View {
             }
         }
     }
+
+    private func finishFirstLaunchIntro() {
+        guard showingFirstLaunchIntro else { return }
+        withAnimation(.easeOut(duration: 0.30)) {
+            showingFirstLaunchIntro = false
+        }
+    }
 }
 
-enum AppTab: Hashable {
+private struct FirstLaunchIntroView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
+    let onFinished: () -> Void
+
+    @State private var entered = false
+    @State private var gathered = false
+    @State private var exiting = false
+    @State private var didFinish = false
+
+    var body: some View {
+        ZStack {
+            TijingPageBackground()
+
+            RadialGradient(
+                colors: [
+                    TijingDesign.butter.opacity(colorScheme == .dark ? 0.08 : 0.28),
+                    TijingDesign.sky.opacity(colorScheme == .dark ? 0.05 : 0.16),
+                    .clear
+                ],
+                center: .center,
+                startRadius: 24,
+                endRadius: 260
+            )
+            .ignoresSafeArea()
+
+            stickerCluster
+                .scaleEffect(exiting ? 0.90 : 1)
+                .offset(y: exiting ? -16 : 0)
+                .opacity(exiting ? 0 : 1)
+
+            VStack {
+                Spacer()
+                Text("轻触即可进入")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .opacity(entered && !exiting ? 1 : 0)
+                    .padding(.bottom, 34)
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { finishNow() }
+        .task { await play() }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("题竞欢迎动画，轻触进入")
+    }
+
+    private var stickerCluster: some View {
+        ZStack {
+            sticker(
+                "checkmark.circle.fill",
+                tint: TijingDesign.mint,
+                background: TijingDesign.sage,
+                size: 50,
+                rotation: -9,
+                final: CGSize(width: -112, height: -118),
+                initial: CGSize(width: -180, height: -172)
+            )
+
+            sticker(
+                "star.fill",
+                tint: TijingDesign.amber,
+                background: TijingDesign.butter,
+                size: 45,
+                rotation: 8,
+                final: CGSize(width: 112, height: -104),
+                initial: CGSize(width: 176, height: -160)
+            )
+
+            sticker(
+                "book.pages.fill",
+                tint: TijingDesign.indigo,
+                background: TijingDesign.lilac,
+                size: 54,
+                rotation: -6,
+                final: CGSize(width: -112, height: 112),
+                initial: CGSize(width: -178, height: 166)
+            )
+
+            sticker(
+                "chart.line.uptrend.xyaxis",
+                tint: TijingDesign.cyan,
+                background: TijingDesign.sky,
+                size: 48,
+                rotation: 7,
+                final: CGSize(width: 116, height: 112),
+                initial: CGSize(width: 178, height: 168)
+            )
+
+            ZStack {
+                RoundedRectangle(cornerRadius: 34, style: .continuous)
+                    .fill(TijingDesign.peach.opacity(colorScheme == .dark ? 0.18 : 0.50))
+                    .frame(width: 204, height: 230)
+                    .rotationEffect(.degrees(entered ? -6 : -14))
+                    .offset(x: -5, y: 7)
+
+                RoundedRectangle(cornerRadius: 34, style: .continuous)
+                    .fill(TijingDesign.sky.opacity(colorScheme == .dark ? 0.16 : 0.42))
+                    .frame(width: 204, height: 230)
+                    .rotationEffect(.degrees(entered ? 5 : 12))
+                    .offset(x: 7, y: 4)
+
+                VStack(spacing: 16) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .fill(TijingDesign.primaryGradient)
+                            .frame(width: 78, height: 78)
+
+                        Image("LaunchAppIcon")
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 70, height: 70)
+                            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    .strokeBorder(.white.opacity(0.28), lineWidth: 1)
+                            }
+
+                        Image(systemName: "sparkle")
+                            .font(.caption.bold())
+                            .foregroundStyle(.white.opacity(0.86))
+                            .offset(x: 29, y: -28)
+                    }
+
+                    VStack(spacing: 6) {
+                        Text("题竞")
+                            .font(.system(.title, design: .rounded, weight: .heavy))
+                        Text("把每一次练习都留下来")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .frame(width: 204, height: 230)
+                .background(
+                    Color(uiColor: .secondarySystemGroupedBackground),
+                    in: RoundedRectangle(cornerRadius: 34, style: .continuous)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 34, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.055))
+                }
+                .shadow(
+                    color: Color.black.opacity(colorScheme == .dark ? 0.22 : 0.08),
+                    radius: 26,
+                    y: 15
+                )
+            }
+            .scaleEffect(entered ? (gathered ? 0.97 : 1) : 0.68)
+            .rotationEffect(.degrees(entered ? 0 : -5))
+            .opacity(entered ? 1 : 0)
+        }
+        .animation(.spring(response: 0.58, dampingFraction: 0.78), value: entered)
+        .animation(.spring(response: 0.42, dampingFraction: 0.82), value: gathered)
+        .animation(.easeInOut(duration: 0.28), value: exiting)
+    }
+
+    private func sticker(
+        _ systemImage: String,
+        tint: Color,
+        background: Color,
+        size: CGFloat,
+        rotation: Double,
+        final: CGSize,
+        initial: CGSize
+    ) -> some View {
+        TijingStickerIcon(
+            systemImage: systemImage,
+            tint: tint,
+            background: background,
+            size: size,
+            rotation: rotation
+        )
+        .offset(
+            x: entered ? final.width * (gathered ? 0.93 : 1) : initial.width,
+            y: entered ? final.height * (gathered ? 0.93 : 1) : initial.height
+        )
+        .scaleEffect(entered ? 1 : 0.62)
+        .opacity(entered ? 1 : 0)
+    }
+
+    @MainActor
+    private func play() async {
+        if reduceMotion {
+            entered = true
+            try? await Task.sleep(for: .milliseconds(360))
+            finishNow()
+            return
+        }
+
+        withAnimation(.spring(response: 0.58, dampingFraction: 0.76)) {
+            entered = true
+        }
+        try? await Task.sleep(for: .milliseconds(460))
+        guard !Task.isCancelled, !didFinish else { return }
+
+        Haptics.light()
+        withAnimation(.spring(response: 0.42, dampingFraction: 0.82)) {
+            gathered = true
+        }
+        try? await Task.sleep(for: .milliseconds(360))
+        guard !Task.isCancelled, !didFinish else { return }
+
+        withAnimation(.easeInOut(duration: 0.28)) {
+            exiting = true
+        }
+        try? await Task.sleep(for: .milliseconds(220))
+        guard !Task.isCancelled, !didFinish else { return }
+        complete()
+    }
+
+    @MainActor
+    private func finishNow() {
+        guard !didFinish else { return }
+        if reduceMotion {
+            complete()
+            return
+        }
+        withAnimation(.easeOut(duration: 0.20)) {
+            exiting = true
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(150))
+            complete()
+        }
+    }
+
+    @MainActor
+    private func complete() {
+        guard !didFinish else { return }
+        didFinish = true
+        onFinished()
+    }
+}
+
+enum AppTab: Hashable, CaseIterable {
     case home, practice, battle, ranking, profile
+
+    var title: String {
+        switch self { case .home: "首页"; case .practice: "刷题"; case .battle: "对战"; case .ranking: "排行"; case .profile: "我的" }
+    }
+
+    var icon: String {
+        switch self { case .home: "house"; case .practice: "book.pages"; case .battle: "bolt.horizontal.circle"; case .ranking: "trophy"; case .profile: "person.crop.circle" }
+    }
+
+    var selectedIcon: String {
+        switch self { case .home: "house.fill"; case .practice: "book.pages.fill"; case .battle: "bolt.horizontal.circle.fill"; case .ranking: "trophy.fill"; case .profile: "person.crop.circle.fill" }
+    }
+}
+
+private struct TijingTabBarHiddenPreferenceKey: PreferenceKey {
+    static var defaultValue = false
+    static func reduce(value: inout Bool, nextValue: () -> Bool) {
+        value = value || nextValue()
+    }
+}
+
+extension View {
+    func tijingTabBarHidden(_ hidden: Bool = true) -> some View {
+        preference(key: TijingTabBarHiddenPreferenceKey.self, value: hidden)
+    }
+}
+
+private struct TijingFloatingTabBar: View {
+    @Binding var selection: AppTab
+    let unread: Int
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(AppTab.allCases, id: \.self) { tab in
+                Button {
+                    guard selection != tab else { return }
+                    Haptics.selection()
+                    withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) { selection = tab }
+                } label: {
+                    VStack(spacing: 4) {
+                        ZStack(alignment: .topTrailing) {
+                            Image(systemName: selection == tab ? tab.selectedIcon : tab.icon)
+                                .font(.system(size: 18, weight: selection == tab ? .semibold : .medium))
+                                .symbolRenderingMode(.hierarchical)
+                                .frame(height: 22)
+                                .contentTransition(.symbolEffect(.replace))
+                            if tab == .profile, unread > 0 {
+                                Text(unread > 99 ? "99+" : "\(unread)")
+                                    .font(.system(size: 7, weight: .bold))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 3)
+                                    .frame(minWidth: 14, minHeight: 14)
+                                    .background(.red, in: Capsule())
+                                    .offset(x: 9, y: -6)
+                            }
+                        }
+                        Text(tab.title)
+                            .font(.system(size: 10.5, weight: selection == tab ? .semibold : .medium))
+                            .lineLimit(1)
+                    }
+                    .foregroundStyle(selection == tab ? Color.accentColor : Color.secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .background {
+                        if selection == tab {
+                            Capsule()
+                                .fill(Color.accentColor.opacity(0.10))
+                                .padding(.horizontal, 3)
+                                .transition(.scale(scale: 0.82).combined(with: .opacity))
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(tab.title)
+                .accessibilityAddTraits(selection == tab ? .isSelected : [])
+            }
+        }
+        .padding(5)
+        .background(.ultraThinMaterial, in: Capsule())
+        .overlay {
+            Capsule()
+                .strokeBorder(Color.white.opacity(0.26), lineWidth: 0.8)
+        }
+        .shadow(color: Color.black.opacity(0.12), radius: 18, y: 7)
+    }
 }
 
 private struct AuthenticatedTabGate<Content: View>: View {
