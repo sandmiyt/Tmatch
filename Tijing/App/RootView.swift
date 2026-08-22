@@ -1,10 +1,10 @@
 import SwiftUI
 import Combine
+import UIKit
 
 struct RootView: View {
     @Environment(SessionStore.self) private var session
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.colorScheme) private var colorScheme
     @State private var selectedTab: AppTab = .home
     @State private var showingAuth = false
     @State private var presentedBattleRoom: PresentedBattleRoom?
@@ -19,6 +19,7 @@ struct RootView: View {
             NavigationStack {
                 HomeView(showingAuth: $showingAuth)
             }
+            .toolbar(.hidden, for: .tabBar)
             .tabItem { Label("首页", systemImage: selectedTab == .home ? "house.fill" : "house") }
             .tag(AppTab.home)
 
@@ -33,6 +34,7 @@ struct RootView: View {
                     showingAuth = true
                 }
             }
+            .toolbar(.hidden, for: .tabBar)
             .tabItem { Label("刷题", systemImage: selectedTab == .practice ? "book.pages.fill" : "book.pages") }
             .tag(AppTab.practice)
 
@@ -47,26 +49,36 @@ struct RootView: View {
                     showingAuth = true
                 }
             }
+            .toolbar(.hidden, for: .tabBar)
             .tabItem { Label("对战", systemImage: selectedTab == .battle ? "bolt.horizontal.circle.fill" : "bolt.horizontal.circle") }
             .tag(AppTab.battle)
 
             NavigationStack {
                 RankingView()
             }
+            .toolbar(.hidden, for: .tabBar)
             .tabItem { Label("排行", systemImage: selectedTab == .ranking ? "trophy.fill" : "trophy") }
             .tag(AppTab.ranking)
 
             NavigationStack {
                 ProfileView(showingAuth: $showingAuth)
             }
+            .toolbar(.hidden, for: .tabBar)
             .tabItem { Label("我的", systemImage: selectedTab == .profile ? "person.crop.circle.fill" : "person.crop.circle") }
             .badge(session.unreadNotifications)
             .tag(AppTab.profile)
             }
-            .toolbar((tabBarHidden || showingFirstLaunchIntro) ? .hidden : .visible, for: .tabBar)
-            .toolbarBackground(.ultraThinMaterial, for: .tabBar)
-            .toolbarBackground(.visible, for: .tabBar)
-            .toolbarColorScheme(colorScheme, for: .tabBar)
+            .toolbar(.hidden, for: .tabBar)
+            .background(TijingSystemTabBarHider())
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if !tabBarHidden && !showingFirstLaunchIntro {
+                    TijingCinevaGlassTabBar(
+                        selection: $selectedTab,
+                        unreadCount: session.unreadNotifications
+                    )
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
             .onPreferenceChange(TijingTabBarHiddenPreferenceKey.self) { hidden in
                 withAnimation(.spring(response: 0.40, dampingFraction: 0.88)) {
                     tabBarHidden = hidden
@@ -396,6 +408,244 @@ enum AppTab: Hashable, CaseIterable {
 
     var selectedIcon: String {
         switch self { case .home: "house.fill"; case .practice: "book.pages.fill"; case .battle: "bolt.horizontal.circle.fill"; case .ranking: "trophy.fill"; case .profile: "person.crop.circle.fill" }
+    }
+}
+
+private struct TijingCinevaGlassTabBar: View {
+    @Binding var selection: AppTab
+    let unreadCount: Int
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var dragLocationX: CGFloat?
+    @State private var isInteracting = false
+
+    private let horizontalInset: CGFloat = 5
+    private let barHeight: CGFloat = 64
+
+    var body: some View {
+        GeometryReader { proxy in
+            let availableWidth = max(proxy.size.width - horizontalInset * 2, 1)
+            let itemWidth = availableWidth / CGFloat(AppTab.allCases.count)
+            let indicatorWidth = max(itemWidth - 6, 48)
+            let selectedCenter = centerX(for: selection, itemWidth: itemWidth)
+            let indicatorCenter = dragLocationX.map {
+                min(max($0, centerX(for: .home, itemWidth: itemWidth)), centerX(for: .profile, itemWidth: itemWidth))
+            } ?? selectedCenter
+
+            ZStack(alignment: .leading) {
+                selectedGlass
+                    .frame(width: indicatorWidth, height: 52)
+                    .scaleEffect(x: isInteracting ? 1.075 : 1, y: isInteracting ? 0.97 : 1)
+                    .offset(x: indicatorCenter - indicatorWidth / 2)
+                    .animation(reduceMotion ? nil : .snappy(duration: 0.30, extraBounce: 0.08), value: selection)
+
+                HStack(spacing: 0) {
+                    ForEach(AppTab.allCases, id: \.self) { tab in
+                        tabItem(tab)
+                            .frame(width: itemWidth, height: 54)
+                    }
+                }
+                .padding(.horizontal, horizontalInset)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(glassBackground)
+            .contentShape(Capsule())
+            .scaleEffect(isInteracting ? 1.008 : 1)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: isInteracting)
+            .gesture(dragGesture(width: proxy.size.width, itemWidth: itemWidth))
+        }
+        .frame(height: barHeight)
+        .padding(.horizontal, 12)
+        .padding(.top, 5)
+        .padding(.bottom, 8)
+    }
+
+    private var glassBackground: some View {
+        Capsule()
+            .fill(.ultraThinMaterial)
+            .overlay {
+                Capsule()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                .white.opacity(colorScheme == .dark ? 0.13 : 0.33),
+                                .white.opacity(0.035),
+                                .black.opacity(colorScheme == .dark ? 0.10 : 0.025)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
+            .overlay {
+                Capsule()
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [
+                                .white.opacity(colorScheme == .dark ? 0.36 : 0.78),
+                                .white.opacity(0.16),
+                                .black.opacity(colorScheme == .dark ? 0.26 : 0.10)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 0.85
+                    )
+            }
+            .overlay(alignment: .top) {
+                Capsule()
+                    .stroke(.white.opacity(colorScheme == .dark ? 0.14 : 0.34), lineWidth: 0.7)
+                    .blur(radius: 0.35)
+                    .padding(.horizontal, 2)
+                    .padding(.top, 1)
+                    .mask {
+                        LinearGradient(colors: [.white, .clear], startPoint: .top, endPoint: .center)
+                    }
+            }
+            .shadow(color: .black.opacity(colorScheme == .dark ? 0.30 : 0.16), radius: 20, x: 0, y: 10)
+            .shadow(color: .white.opacity(colorScheme == .dark ? 0.02 : 0.16), radius: 1, x: 0, y: -1)
+    }
+
+    private var selectedGlass: some View {
+        Capsule()
+            .fill(.thinMaterial)
+            .overlay {
+                Capsule()
+                    .fill(Color.accentColor.opacity(colorScheme == .dark ? 0.24 : 0.13))
+            }
+            .overlay {
+                Capsule()
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [
+                                .white.opacity(colorScheme == .dark ? 0.28 : 0.66),
+                                Color.accentColor.opacity(0.12),
+                                .black.opacity(colorScheme == .dark ? 0.22 : 0.06)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 0.75
+                    )
+            }
+            .shadow(color: Color.accentColor.opacity(colorScheme == .dark ? 0.13 : 0.09), radius: 8, y: 2)
+            .shadow(color: .black.opacity(colorScheme == .dark ? 0.18 : 0.08), radius: 5, y: 3)
+    }
+
+    private func tabItem(_ tab: AppTab) -> some View {
+        let isSelected = selection == tab
+
+        return VStack(spacing: 2) {
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: isSelected ? tab.selectedIcon : tab.icon)
+                    .font(.system(size: 19, weight: isSelected ? .semibold : .medium))
+                    .symbolRenderingMode(.monochrome)
+                    .contentTransition(.symbolEffect(.replace))
+                    .frame(width: 27, height: 25)
+
+                if tab == .profile && unreadCount > 0 {
+                    Text(unreadCount > 99 ? "99+" : "\(unreadCount)")
+                        .font(.system(size: unreadCount > 9 ? 7 : 8, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, unreadCount > 9 ? 3 : 0)
+                        .frame(minWidth: 15, minHeight: 15)
+                        .background(.red, in: Capsule())
+                        .overlay(Capsule().stroke(.white.opacity(0.88), lineWidth: 1))
+                        .offset(x: 7, y: -5)
+                }
+            }
+
+            Text(tab.title)
+                .font(.system(size: 10, weight: isSelected ? .semibold : .medium, design: .rounded))
+                .lineLimit(1)
+        }
+        .foregroundStyle(isSelected ? Color.accentColor : Color.primary.opacity(colorScheme == .dark ? 0.72 : 0.62))
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: isSelected)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(tab.title)
+        .accessibilityValue(isSelected ? "已选择" : "")
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+        .accessibilityAction {
+            select(tab)
+        }
+    }
+
+    private func dragGesture(width: CGFloat, itemWidth: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 0, coordinateSpace: .local)
+            .onChanged { value in
+                let lowerBound = centerX(for: .home, itemWidth: itemWidth)
+                let upperBound = centerX(for: .profile, itemWidth: itemWidth)
+                let location = min(max(value.location.x, lowerBound), upperBound)
+                dragLocationX = location
+                isInteracting = true
+                select(tab(at: location, itemWidth: itemWidth, totalWidth: width))
+            }
+            .onEnded { value in
+                let location = min(max(value.location.x, 0), width)
+                select(tab(at: location, itemWidth: itemWidth, totalWidth: width))
+                withAnimation(reduceMotion ? nil : .snappy(duration: 0.32, extraBounce: 0.08)) {
+                    dragLocationX = nil
+                    isInteracting = false
+                }
+            }
+    }
+
+    private func centerX(for tab: AppTab, itemWidth: CGFloat) -> CGFloat {
+        let index = AppTab.allCases.firstIndex(of: tab) ?? 0
+        return horizontalInset + itemWidth * (CGFloat(index) + 0.5)
+    }
+
+    private func tab(at x: CGFloat, itemWidth: CGFloat, totalWidth: CGFloat) -> AppTab {
+        let clampedX = min(max(x - horizontalInset, 0), max(totalWidth - horizontalInset * 2 - 0.001, 0))
+        let index = min(max(Int(clampedX / itemWidth), 0), AppTab.allCases.count - 1)
+        return AppTab.allCases[index]
+    }
+
+    private func select(_ tab: AppTab) {
+        guard selection != tab else { return }
+        selection = tab
+    }
+}
+
+private struct TijingSystemTabBarHider: UIViewControllerRepresentable {
+    func makeUIViewController(context: Context) -> Controller {
+        Controller()
+    }
+
+    func updateUIViewController(_ uiViewController: Controller, context: Context) {
+        uiViewController.hideSystemTabBar()
+        DispatchQueue.main.async {
+            uiViewController.hideSystemTabBar()
+        }
+    }
+
+    final class Controller: UIViewController {
+        override func viewDidLoad() {
+            super.viewDidLoad()
+            view.backgroundColor = .clear
+            view.isUserInteractionEnabled = false
+        }
+
+        override func viewWillAppear(_ animated: Bool) {
+            super.viewWillAppear(animated)
+            hideSystemTabBar()
+        }
+
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            hideSystemTabBar()
+        }
+
+        override func viewDidLayoutSubviews() {
+            super.viewDidLayoutSubviews()
+            hideSystemTabBar()
+        }
+
+        func hideSystemTabBar() {
+            tabBarController?.tabBar.isHidden = true
+            parent?.tabBarController?.tabBar.isHidden = true
+        }
     }
 }
 
