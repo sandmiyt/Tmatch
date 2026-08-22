@@ -18,7 +18,7 @@ struct RootView: View {
             NavigationStack {
                 HomeView(showingAuth: $showingAuth)
             }
-            .tabItem { Label("首页", systemImage: selectedTab == .home ? "house.fill" : "house") }
+            .tabItem { Label("首页", systemImage: "house.fill") }
             .tag(AppTab.home)
 
             NavigationStack {
@@ -32,7 +32,7 @@ struct RootView: View {
                     showingAuth = true
                 }
             }
-            .tabItem { Label("刷题", systemImage: selectedTab == .practice ? "book.pages.fill" : "book.pages") }
+            .tabItem { Label("刷题", systemImage: "book.pages.fill") }
             .tag(AppTab.practice)
 
             NavigationStack {
@@ -46,19 +46,19 @@ struct RootView: View {
                     showingAuth = true
                 }
             }
-            .tabItem { Label("对战", systemImage: selectedTab == .battle ? "bolt.horizontal.circle.fill" : "bolt.horizontal.circle") }
+            .tabItem { Label("对战", systemImage: "bolt.horizontal.circle.fill") }
             .tag(AppTab.battle)
 
             NavigationStack {
                 RankingView()
             }
-            .tabItem { Label("排行", systemImage: selectedTab == .ranking ? "trophy.fill" : "trophy") }
+            .tabItem { Label("排行", systemImage: "trophy.fill") }
             .tag(AppTab.ranking)
 
             NavigationStack {
                 ProfileView(showingAuth: $showingAuth)
             }
-            .tabItem { Label("我的", systemImage: selectedTab == .profile ? "person.crop.circle.fill" : "person.crop.circle") }
+            .tabItem { Label("我的", systemImage: "person.crop.circle.fill") }
             .badge(session.unreadNotifications)
             .tag(AppTab.profile)
             }
