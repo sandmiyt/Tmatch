@@ -63,7 +63,7 @@ struct RootView: View {
             .tag(AppTab.profile)
             }
             .toolbar((tabBarHidden || showingFirstLaunchIntro) ? .hidden : .visible, for: .tabBar)
-            .toolbarBackground(.regularMaterial, for: .tabBar)
+            .toolbarBackground(.ultraThinMaterial, for: .tabBar)
             .toolbarBackground(.visible, for: .tabBar)
             .onPreferenceChange(TijingTabBarHiddenPreferenceKey.self) { hidden in
                 withAnimation(.spring(response: 0.40, dampingFraction: 0.88)) {
