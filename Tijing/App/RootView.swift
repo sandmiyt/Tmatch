@@ -62,9 +62,19 @@ struct RootView: View {
             .badge(session.unreadNotifications)
             .tag(AppTab.profile)
             }
-            .toolbar((tabBarHidden || showingFirstLaunchIntro) ? .hidden : .visible, for: .tabBar)
-            .toolbarBackground(.regularMaterial, for: .tabBar)
-            .toolbarBackground(.visible, for: .tabBar)
+            .toolbar(.hidden, for: .tabBar)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if !tabBarHidden && !showingFirstLaunchIntro {
+                    TijingFloatingTabBar(
+                        selection: $selectedTab,
+                        unread: session.unreadNotifications
+                    )
+                    .padding(.horizontal, 14)
+                    .padding(.top, 8)
+                    .padding(.bottom, 8)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
             .onPreferenceChange(TijingTabBarHiddenPreferenceKey.self) { hidden in
                 withAnimation(.spring(response: 0.40, dampingFraction: 0.88)) {
                     tabBarHidden = hidden
@@ -419,7 +429,6 @@ private struct TijingFloatingTabBar: View {
             ForEach(AppTab.allCases, id: \.self) { tab in
                 Button {
                     guard selection != tab else { return }
-                    Haptics.selection()
                     withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) { selection = tab }
                 } label: {
                     VStack(spacing: 4) {
