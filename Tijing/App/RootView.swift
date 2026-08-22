@@ -18,7 +18,7 @@ struct RootView: View {
             NavigationStack {
                 HomeView(showingAuth: $showingAuth)
             }
-            .tabItem { Label("首页", systemImage: "house.fill") }
+            .tabItem { Label("首页", systemImage: selectedTab == .home ? "house.fill" : "house") }
             .tag(AppTab.home)
 
             NavigationStack {
@@ -32,7 +32,7 @@ struct RootView: View {
                     showingAuth = true
                 }
             }
-            .tabItem { Label("刷题", systemImage: "book.pages.fill") }
+            .tabItem { Label("刷题", systemImage: selectedTab == .practice ? "book.pages.fill" : "book.pages") }
             .tag(AppTab.practice)
 
             NavigationStack {
@@ -46,24 +46,24 @@ struct RootView: View {
                     showingAuth = true
                 }
             }
-            .tabItem { Label("对战", systemImage: "bolt.horizontal.circle.fill") }
+            .tabItem { Label("对战", systemImage: selectedTab == .battle ? "bolt.horizontal.circle.fill" : "bolt.horizontal.circle") }
             .tag(AppTab.battle)
 
             NavigationStack {
                 RankingView()
             }
-            .tabItem { Label("排行", systemImage: "trophy.fill") }
+            .tabItem { Label("排行", systemImage: selectedTab == .ranking ? "trophy.fill" : "trophy") }
             .tag(AppTab.ranking)
 
             NavigationStack {
                 ProfileView(showingAuth: $showingAuth)
             }
-            .tabItem { Label("我的", systemImage: "person.crop.circle.fill") }
+            .tabItem { Label("我的", systemImage: selectedTab == .profile ? "person.crop.circle.fill" : "person.crop.circle") }
             .badge(session.unreadNotifications)
             .tag(AppTab.profile)
             }
             .toolbar((tabBarHidden || showingFirstLaunchIntro) ? .hidden : .visible, for: .tabBar)
-            .toolbarBackground(.ultraThinMaterial, for: .tabBar)
+            .toolbarBackground(.regularMaterial, for: .tabBar)
             .toolbarBackground(.visible, for: .tabBar)
             .onPreferenceChange(TijingTabBarHiddenPreferenceKey.self) { hidden in
                 withAnimation(.spring(response: 0.40, dampingFraction: 0.88)) {
