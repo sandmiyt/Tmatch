@@ -20,11 +20,9 @@ struct RootView: View {
                 HomeView(showingAuth: $showingAuth)
             }
             .tijingRootTabChrome(
-                selection: $selectedTab,
-                unreadCount: session.unreadNotifications,
                 isVisible: !tabBarHidden && !showingFirstLaunchIntro
             )
-            .tabItem { Label("首页", systemImage: selectedTab == .home ? "house.fill" : "house") }
+            .tabItem { Label("首页", systemImage: "house") }
             .tag(AppTab.home)
 
             NavigationStack {
@@ -39,11 +37,9 @@ struct RootView: View {
                 }
             }
             .tijingRootTabChrome(
-                selection: $selectedTab,
-                unreadCount: session.unreadNotifications,
                 isVisible: !tabBarHidden && !showingFirstLaunchIntro
             )
-            .tabItem { Label("刷题", systemImage: selectedTab == .practice ? "book.pages.fill" : "book.pages") }
+            .tabItem { Label("刷题", systemImage: "book.pages") }
             .tag(AppTab.practice)
 
             NavigationStack {
@@ -58,33 +54,27 @@ struct RootView: View {
                 }
             }
             .tijingRootTabChrome(
-                selection: $selectedTab,
-                unreadCount: session.unreadNotifications,
                 isVisible: !tabBarHidden && !showingFirstLaunchIntro
             )
-            .tabItem { Label("对战", systemImage: selectedTab == .battle ? "bolt.horizontal.circle.fill" : "bolt.horizontal.circle") }
+            .tabItem { Label("对战", systemImage: "bolt.horizontal.circle") }
             .tag(AppTab.battle)
 
             NavigationStack {
                 RankingView()
             }
             .tijingRootTabChrome(
-                selection: $selectedTab,
-                unreadCount: session.unreadNotifications,
                 isVisible: !tabBarHidden && !showingFirstLaunchIntro
             )
-            .tabItem { Label("排行", systemImage: selectedTab == .ranking ? "trophy.fill" : "trophy") }
+            .tabItem { Label("排行", systemImage: "trophy") }
             .tag(AppTab.ranking)
 
             NavigationStack {
                 ProfileView(showingAuth: $showingAuth)
             }
             .tijingRootTabChrome(
-                selection: $selectedTab,
-                unreadCount: session.unreadNotifications,
                 isVisible: !tabBarHidden && !showingFirstLaunchIntro
             )
-            .tabItem { Label("我的", systemImage: selectedTab == .profile ? "person.crop.circle.fill" : "person.crop.circle") }
+            .tabItem { Label("我的", systemImage: "person.crop.circle") }
             .badge(session.unreadNotifications)
             .tag(AppTab.profile)
             }
@@ -98,6 +88,18 @@ struct RootView: View {
             .scaleEffect(showingFirstLaunchIntro ? 1.012 : 1)
             .opacity(showingFirstLaunchIntro ? 0.94 : 1)
             .animation(.easeOut(duration: 0.34), value: showingFirstLaunchIntro)
+
+            if !tabBarHidden && !showingFirstLaunchIntro {
+                VStack(spacing: 0) {
+                    Spacer(minLength: 0)
+                    TijingCinevaGlassTabBar(
+                        selection: $selectedTab,
+                        unreadCount: session.unreadNotifications
+                    )
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .zIndex(50)
+            }
 
             if showingFirstLaunchIntro {
                 FirstLaunchIntroView {
@@ -423,41 +425,24 @@ enum AppTab: Hashable, CaseIterable {
 }
 
 private struct TijingRootTabChromeModifier: ViewModifier {
-    @Binding var selection: AppTab
-    let unreadCount: Int
     let isVisible: Bool
 
     func body(content: Content) -> some View {
-        ZStack(alignment: .bottom) {
-            content
-                .toolbar(.hidden, for: .tabBar)
-                .environment(
-                    \.tijingTabBarContentClearance,
-                    isVisible ? TijingTabBarLayout.reservedHeight : 0
-                )
-
-            if isVisible {
-                TijingCinevaGlassTabBar(
-                    selection: $selection,
-                    unreadCount: unreadCount
-                )
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        content
+            .toolbar(.hidden, for: .tabBar)
+            .environment(
+                \.tijingTabBarContentClearance,
+                isVisible ? TijingTabBarLayout.reservedHeight : 0
+            )
     }
 }
 
 private extension View {
     func tijingRootTabChrome(
-        selection: Binding<AppTab>,
-        unreadCount: Int,
         isVisible: Bool
     ) -> some View {
         modifier(
             TijingRootTabChromeModifier(
-                selection: selection,
-                unreadCount: unreadCount,
                 isVisible: isVisible
             )
         )
@@ -517,9 +502,9 @@ private struct TijingCinevaGlassTabBar: View {
             ZStack(alignment: .leading) {
                 selectedGlass
                     .frame(width: indicatorWidth, height: 52)
-                    .scaleEffect(x: isInteracting ? 1.075 : 1, y: isInteracting ? 0.97 : 1)
+                    .scaleEffect(x: isInteracting ? 1.035 : 1, y: isInteracting ? 0.985 : 1)
                     .offset(x: indicatorCenter - indicatorWidth / 2)
-                    .animation(reduceMotion ? nil : .snappy(duration: 0.30, extraBounce: 0.08), value: selection)
+                    .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.90), value: selection)
 
                 HStack(spacing: 0) {
                     ForEach(AppTab.allCases, id: \.self) { tab in
@@ -532,9 +517,10 @@ private struct TijingCinevaGlassTabBar: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(glassBackground)
             .contentShape(Capsule())
-            .scaleEffect(isInteracting ? 1.008 : 1)
+            .scaleEffect(isInteracting ? 1.003 : 1)
             .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: isInteracting)
             .gesture(dragGesture(width: proxy.size.width, itemWidth: itemWidth))
+            .simultaneousGesture(tapGesture(width: proxy.size.width, itemWidth: itemWidth))
         }
         .frame(height: barHeight)
         .padding(.horizontal, 12)
@@ -659,7 +645,7 @@ private struct TijingCinevaGlassTabBar: View {
     }
 
     private func dragGesture(width: CGFloat, itemWidth: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 0, coordinateSpace: .local)
+        DragGesture(minimumDistance: 4, coordinateSpace: .local)
             .onChanged { value in
                 let lowerBound = centerX(for: .home, itemWidth: itemWidth)
                 let upperBound = centerX(for: .profile, itemWidth: itemWidth)
@@ -675,11 +661,19 @@ private struct TijingCinevaGlassTabBar: View {
                 let location = min(max(value.location.x, 0), width)
                 let destination = tab(at: location, itemWidth: itemWidth, totalWidth: width)
                 select(destination)
-                withAnimation(reduceMotion ? nil : .snappy(duration: 0.32, extraBounce: 0.08)) {
+                withAnimation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.90)) {
                     dragLocationX = nil
                     previewSelection = nil
                     isInteracting = false
                 }
+            }
+    }
+
+    private func tapGesture(width: CGFloat, itemWidth: CGFloat) -> some Gesture {
+        SpatialTapGesture()
+            .onEnded { value in
+                let location = min(max(value.location.x, 0), width)
+                select(tab(at: location, itemWidth: itemWidth, totalWidth: width))
             }
     }
 
@@ -730,11 +724,6 @@ private struct TijingSystemTabBarHider: UIViewControllerRepresentable {
 
         override func viewDidAppear(_ animated: Bool) {
             super.viewDidAppear(animated)
-            hideSystemTabBar()
-        }
-
-        override func viewDidLayoutSubviews() {
-            super.viewDidLayoutSubviews()
             hideSystemTabBar()
         }
 
