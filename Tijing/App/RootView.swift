@@ -422,6 +422,7 @@ private struct TijingCinevaGlassTabBar: View {
 
     private let horizontalInset: CGFloat = 5
     private let barHeight: CGFloat = 64
+    private let contentClearance: CGFloat = 18
 
     var body: some View {
         GeometryReader { proxy in
@@ -457,7 +458,7 @@ private struct TijingCinevaGlassTabBar: View {
         }
         .frame(height: barHeight)
         .padding(.horizontal, 12)
-        .padding(.top, 5)
+        .padding(.top, contentClearance)
         .padding(.bottom, 8)
     }
 
