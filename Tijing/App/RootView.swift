@@ -428,17 +428,23 @@ private struct TijingRootTabChromeModifier: ViewModifier {
     let isVisible: Bool
 
     func body(content: Content) -> some View {
-        content
-            .toolbar(.hidden, for: .tabBar)
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                if isVisible {
-                    TijingCinevaGlassTabBar(
-                        selection: $selection,
-                        unreadCount: unreadCount
-                    )
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
+        ZStack(alignment: .bottom) {
+            content
+                .toolbar(.hidden, for: .tabBar)
+                .environment(
+                    \.tijingTabBarContentClearance,
+                    isVisible ? TijingTabBarLayout.reservedHeight : 0
+                )
+
+            if isVisible {
+                TijingCinevaGlassTabBar(
+                    selection: $selection,
+                    unreadCount: unreadCount
+                )
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -455,6 +461,32 @@ private extension View {
                 isVisible: isVisible
             )
         )
+    }
+}
+
+private enum TijingTabBarLayout {
+    static let reservedHeight: CGFloat = 90
+}
+
+private struct TijingTabBarContentClearanceKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 0
+}
+
+extension EnvironmentValues {
+    var tijingTabBarContentClearance: CGFloat {
+        get { self[TijingTabBarContentClearanceKey.self] }
+        set { self[TijingTabBarContentClearanceKey.self] = newValue }
+    }
+}
+
+struct TijingTabBarContentFooter: View {
+    @Environment(\.tijingTabBarContentClearance) private var clearance
+
+    var body: some View {
+        Color.clear
+            .frame(height: clearance)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
     }
 }
 

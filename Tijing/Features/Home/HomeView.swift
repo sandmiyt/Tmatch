@@ -52,6 +52,8 @@ struct HomeView: View {
                             .padding(14)
                             .tijingCard()
                     }
+
+                    TijingTabBarContentFooter()
                 }
                 .padding(.horizontal, TijingDesign.pageHorizontalPadding)
                 .padding(.top, 10)

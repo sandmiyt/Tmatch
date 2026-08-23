@@ -55,6 +55,8 @@ struct RankingView: View {
                                 .foregroundStyle(.secondary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
+
+                        TijingTabBarContentFooter()
                     }
                     .padding(.horizontal, TijingDesign.pageHorizontalPadding)
                     .padding(.top, 10)

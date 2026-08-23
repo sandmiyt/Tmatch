@@ -27,6 +27,7 @@ struct ProfileView: View {
                             .tijingReveal(order: 4)
                         logoutButton
                             .tijingReveal(order: 5)
+                        TijingTabBarContentFooter()
                     }
                     .padding(.horizontal, TijingDesign.pageHorizontalPadding)
                     .padding(.top, 8)
