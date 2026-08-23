@@ -19,7 +19,11 @@ struct RootView: View {
             NavigationStack {
                 HomeView(showingAuth: $showingAuth)
             }
-            .toolbar(.hidden, for: .tabBar)
+            .tijingRootTabChrome(
+                selection: $selectedTab,
+                unreadCount: session.unreadNotifications,
+                isVisible: !tabBarHidden && !showingFirstLaunchIntro
+            )
             .tabItem { Label("首页", systemImage: selectedTab == .home ? "house.fill" : "house") }
             .tag(AppTab.home)
 
@@ -34,7 +38,11 @@ struct RootView: View {
                     showingAuth = true
                 }
             }
-            .toolbar(.hidden, for: .tabBar)
+            .tijingRootTabChrome(
+                selection: $selectedTab,
+                unreadCount: session.unreadNotifications,
+                isVisible: !tabBarHidden && !showingFirstLaunchIntro
+            )
             .tabItem { Label("刷题", systemImage: selectedTab == .practice ? "book.pages.fill" : "book.pages") }
             .tag(AppTab.practice)
 
@@ -49,36 +57,39 @@ struct RootView: View {
                     showingAuth = true
                 }
             }
-            .toolbar(.hidden, for: .tabBar)
+            .tijingRootTabChrome(
+                selection: $selectedTab,
+                unreadCount: session.unreadNotifications,
+                isVisible: !tabBarHidden && !showingFirstLaunchIntro
+            )
             .tabItem { Label("对战", systemImage: selectedTab == .battle ? "bolt.horizontal.circle.fill" : "bolt.horizontal.circle") }
             .tag(AppTab.battle)
 
             NavigationStack {
                 RankingView()
             }
-            .toolbar(.hidden, for: .tabBar)
+            .tijingRootTabChrome(
+                selection: $selectedTab,
+                unreadCount: session.unreadNotifications,
+                isVisible: !tabBarHidden && !showingFirstLaunchIntro
+            )
             .tabItem { Label("排行", systemImage: selectedTab == .ranking ? "trophy.fill" : "trophy") }
             .tag(AppTab.ranking)
 
             NavigationStack {
                 ProfileView(showingAuth: $showingAuth)
             }
-            .toolbar(.hidden, for: .tabBar)
+            .tijingRootTabChrome(
+                selection: $selectedTab,
+                unreadCount: session.unreadNotifications,
+                isVisible: !tabBarHidden && !showingFirstLaunchIntro
+            )
             .tabItem { Label("我的", systemImage: selectedTab == .profile ? "person.crop.circle.fill" : "person.crop.circle") }
             .badge(session.unreadNotifications)
             .tag(AppTab.profile)
             }
             .toolbar(.hidden, for: .tabBar)
             .background(TijingSystemTabBarHider())
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                if !tabBarHidden && !showingFirstLaunchIntro {
-                    TijingCinevaGlassTabBar(
-                        selection: $selectedTab,
-                        unreadCount: session.unreadNotifications
-                    )
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-            }
             .onPreferenceChange(TijingTabBarHiddenPreferenceKey.self) { hidden in
                 withAnimation(.spring(response: 0.40, dampingFraction: 0.88)) {
                     tabBarHidden = hidden
@@ -411,6 +422,42 @@ enum AppTab: Hashable, CaseIterable {
     }
 }
 
+private struct TijingRootTabChromeModifier: ViewModifier {
+    @Binding var selection: AppTab
+    let unreadCount: Int
+    let isVisible: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .toolbar(.hidden, for: .tabBar)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if isVisible {
+                    TijingCinevaGlassTabBar(
+                        selection: $selection,
+                        unreadCount: unreadCount
+                    )
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+    }
+}
+
+private extension View {
+    func tijingRootTabChrome(
+        selection: Binding<AppTab>,
+        unreadCount: Int,
+        isVisible: Bool
+    ) -> some View {
+        modifier(
+            TijingRootTabChromeModifier(
+                selection: selection,
+                unreadCount: unreadCount,
+                isVisible: isVisible
+            )
+        )
+    }
+}
+
 private struct TijingCinevaGlassTabBar: View {
     @Binding var selection: AppTab
     let unreadCount: Int
@@ -418,6 +465,7 @@ private struct TijingCinevaGlassTabBar: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
     @State private var dragLocationX: CGFloat?
+    @State private var previewSelection: AppTab?
     @State private var isInteracting = false
 
     private let horizontalInset: CGFloat = 5
@@ -429,7 +477,7 @@ private struct TijingCinevaGlassTabBar: View {
             let availableWidth = max(proxy.size.width - horizontalInset * 2, 1)
             let itemWidth = availableWidth / CGFloat(AppTab.allCases.count)
             let indicatorWidth = max(itemWidth - 6, 48)
-            let selectedCenter = centerX(for: selection, itemWidth: itemWidth)
+            let selectedCenter = centerX(for: visualSelection, itemWidth: itemWidth)
             let indicatorCenter = dragLocationX.map {
                 min(max($0, centerX(for: .home, itemWidth: itemWidth)), centerX(for: .profile, itemWidth: itemWidth))
             } ?? selectedCenter
@@ -494,48 +542,54 @@ private struct TijingCinevaGlassTabBar: View {
                         lineWidth: 0.85
                     )
             }
-            .overlay(alignment: .top) {
-                Capsule()
-                    .stroke(.white.opacity(colorScheme == .dark ? 0.14 : 0.34), lineWidth: 0.7)
-                    .blur(radius: 0.35)
-                    .padding(.horizontal, 2)
-                    .padding(.top, 1)
-                    .mask {
-                        LinearGradient(colors: [.white, .clear], startPoint: .top, endPoint: .center)
-                    }
-            }
             .shadow(color: .black.opacity(colorScheme == .dark ? 0.30 : 0.16), radius: 20, x: 0, y: 10)
-            .shadow(color: .white.opacity(colorScheme == .dark ? 0.02 : 0.16), radius: 1, x: 0, y: -1)
     }
 
     private var selectedGlass: some View {
         Capsule()
-            .fill(.thinMaterial)
+            .fill(.regularMaterial)
             .overlay {
                 Capsule()
-                    .fill(Color.accentColor.opacity(colorScheme == .dark ? 0.24 : 0.13))
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                .white.opacity(colorScheme == .dark ? 0.20 : 0.50),
+                                Color.accentColor.opacity(colorScheme == .dark ? 0.30 : 0.18),
+                                .white.opacity(colorScheme == .dark ? 0.05 : 0.16)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
             }
             .overlay {
                 Capsule()
                     .strokeBorder(
                         LinearGradient(
                             colors: [
-                                .white.opacity(colorScheme == .dark ? 0.28 : 0.66),
-                                Color.accentColor.opacity(0.12),
-                                .black.opacity(colorScheme == .dark ? 0.22 : 0.06)
+                                .white.opacity(colorScheme == .dark ? 0.58 : 0.92),
+                                .white.opacity(colorScheme == .dark ? 0.18 : 0.42),
+                                Color.accentColor.opacity(0.24),
+                                .black.opacity(colorScheme == .dark ? 0.25 : 0.08)
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ),
-                        lineWidth: 0.75
+                        lineWidth: 1
                     )
             }
-            .shadow(color: Color.accentColor.opacity(colorScheme == .dark ? 0.13 : 0.09), radius: 8, y: 2)
-            .shadow(color: .black.opacity(colorScheme == .dark ? 0.18 : 0.08), radius: 5, y: 3)
+            .overlay {
+                Capsule()
+                    .trim(from: 0.06, to: 0.47)
+                    .stroke(.white.opacity(colorScheme == .dark ? 0.48 : 0.86), style: StrokeStyle(lineWidth: 1.15, lineCap: .round))
+                    .padding(1.5)
+            }
+            .shadow(color: Color.accentColor.opacity(colorScheme == .dark ? 0.18 : 0.12), radius: 7, y: 2)
+            .shadow(color: .black.opacity(colorScheme == .dark ? 0.16 : 0.07), radius: 4, y: 3)
     }
 
     private func tabItem(_ tab: AppTab) -> some View {
-        let isSelected = selection == tab
+        let isSelected = visualSelection == tab
 
         return VStack(spacing: 2) {
             ZStack(alignment: .topTrailing) {
@@ -580,13 +634,18 @@ private struct TijingCinevaGlassTabBar: View {
                 let location = min(max(value.location.x, lowerBound), upperBound)
                 dragLocationX = location
                 isInteracting = true
-                select(tab(at: location, itemWidth: itemWidth, totalWidth: width))
+                let hoveredTab = tab(at: location, itemWidth: itemWidth, totalWidth: width)
+                if previewSelection != hoveredTab {
+                    previewSelection = hoveredTab
+                }
             }
             .onEnded { value in
                 let location = min(max(value.location.x, 0), width)
-                select(tab(at: location, itemWidth: itemWidth, totalWidth: width))
+                let destination = tab(at: location, itemWidth: itemWidth, totalWidth: width)
+                select(destination)
                 withAnimation(reduceMotion ? nil : .snappy(duration: 0.32, extraBounce: 0.08)) {
                     dragLocationX = nil
+                    previewSelection = nil
                     isInteracting = false
                 }
             }
@@ -606,6 +665,10 @@ private struct TijingCinevaGlassTabBar: View {
     private func select(_ tab: AppTab) {
         guard selection != tab else { return }
         selection = tab
+    }
+
+    private var visualSelection: AppTab {
+        previewSelection ?? selection
     }
 }
 
@@ -644,8 +707,12 @@ private struct TijingSystemTabBarHider: UIViewControllerRepresentable {
         }
 
         func hideSystemTabBar() {
-            tabBarController?.tabBar.isHidden = true
-            parent?.tabBarController?.tabBar.isHidden = true
+            if let tabBar = tabBarController?.tabBar, !tabBar.isHidden {
+                tabBar.isHidden = true
+            }
+            if let tabBar = parent?.tabBarController?.tabBar, !tabBar.isHidden {
+                tabBar.isHidden = true
+            }
         }
     }
 }
