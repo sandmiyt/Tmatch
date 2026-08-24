@@ -100,13 +100,11 @@ struct ExamCalendarView: View {
     }
 
     private var filterBar: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Label("筛选", systemImage: "line.3.horizontal.decrease.circle.fill")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
-
-                Spacer(minLength: 8)
 
                 if response != nil {
                     let count = filteredItems.count
@@ -115,6 +113,31 @@ struct ExamCalendarView: View {
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
                         .contentTransition(.numericText())
+                        .padding(.horizontal, 8)
+                        .frame(height: 26)
+                        .background(Color.primary.opacity(0.045), in: Capsule())
+                }
+
+                Spacer(minLength: 8)
+
+                if province != "全部" || city != "全部" || followedOnly {
+                    Button {
+                        withAnimation(.snappy(duration: 0.28)) {
+                            province = "全部"
+                            city = "全部"
+                            followedOnly = false
+                        }
+                        Haptics.selection()
+                    } label: {
+                        Label("重置", systemImage: "xmark")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(TijingDesign.indigo)
+                            .padding(.horizontal, 9)
+                            .frame(height: 30)
+                            .background(TijingDesign.indigo.opacity(0.10), in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("重置筛选")
                 }
             }
 
@@ -152,11 +175,28 @@ struct ExamCalendarView: View {
                         systemImage: "map.fill",
                         selected: province != "全部",
                         tint: TijingDesign.indigo,
-                        showsChevron: true
+                        showsChevron: true,
+                        fillsWidth: true
                     )
                 }
                 .buttonStyle(.plain)
+                .frame(maxWidth: .infinity)
 
+                Button {
+                    withAnimation(.snappy(duration: 0.28)) { followedOnly.toggle() }
+                    Haptics.selection()
+                } label: {
+                    filterChip(
+                        title: "只看关注",
+                        systemImage: followedOnly ? "star.fill" : "star",
+                        selected: followedOnly,
+                        tint: TijingDesign.amber
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+
+            HStack(spacing: 9) {
                 Menu {
                     Button {
                         withAnimation(.snappy(duration: 0.28)) { city = "全部" }
@@ -182,49 +222,14 @@ struct ExamCalendarView: View {
                         systemImage: "location.fill",
                         selected: city != "全部",
                         tint: TijingDesign.cyan,
-                        showsChevron: true
+                        showsChevron: true,
+                        fillsWidth: true
                     )
                 }
                 .buttonStyle(.plain)
                 .disabled(province == "全部")
                 .opacity(province == "全部" ? 0.55 : 1)
-
-                Spacer(minLength: 0)
-
-                if province != "全部" || city != "全部" || followedOnly {
-                    Button {
-                        withAnimation(.snappy(duration: 0.28)) {
-                            province = "全部"
-                            city = "全部"
-                            followedOnly = false
-                        }
-                        Haptics.selection()
-                    } label: {
-                        Image(systemName: "arrow.counterclockwise")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 34, height: 34)
-                            .background(Color.primary.opacity(0.045), in: Circle())
-                    }
-                    .buttonStyle(TijingPressableCardStyle())
-                    .accessibilityLabel("清除筛选")
-                }
-            }
-
-            HStack(spacing: 9) {
-                Button {
-                    withAnimation(.snappy(duration: 0.28)) { followedOnly.toggle() }
-                    Haptics.selection()
-                } label: {
-                    filterChip(
-                        title: "只看关注",
-                        systemImage: followedOnly ? "star.fill" : "star",
-                        selected: followedOnly,
-                        tint: TijingDesign.amber
-                    )
-                }
-                .buttonStyle(.plain)
-                Spacer(minLength: 0)
+                .frame(maxWidth: .infinity)
             }
         }
         .padding(14)
@@ -244,7 +249,8 @@ struct ExamCalendarView: View {
         systemImage: String,
         selected: Bool,
         tint: Color,
-        showsChevron: Bool = false
+        showsChevron: Bool = false,
+        fillsWidth: Bool = false
     ) -> some View {
         HStack(spacing: 6) {
             Image(systemName: systemImage)
@@ -260,7 +266,7 @@ struct ExamCalendarView: View {
         }
         .foregroundStyle(selected ? tint : Color.primary.opacity(0.76))
         .padding(.horizontal, 11)
-        .frame(height: 36)
+        .frame(maxWidth: fillsWidth ? .infinity : nil, minHeight: 36)
         .background(
             selected ? tint.opacity(0.13) : Color.primary.opacity(0.045),
             in: Capsule()
