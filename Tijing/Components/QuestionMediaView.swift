@@ -1,26 +1,45 @@
 import SwiftUI
 import UIKit
 
+enum QuestionMediaLayout: Equatable {
+    case standard
+    case compact
+
+    var singleHeight: CGFloat { self == .standard ? 228 : 132 }
+    var multipleSize: CGSize { self == .standard ? CGSize(width: 220, height: 165) : CGSize(width: 164, height: 116) }
+    var cornerRadius: CGFloat { self == .standard ? 16 : 12 }
+    var imagePadding: CGFloat { self == .standard ? 10 : 7 }
+}
+
 struct QuestionMediaStrip: View {
     let urls: [String]
+    var layout: QuestionMediaLayout = .standard
     @State private var selected: SelectedMedia?
 
+    private var values: [String] {
+        var seen = Set<String>()
+        return urls.compactMap { raw in
+            let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !value.isEmpty, seen.insert(value).inserted else { return nil }
+            return value
+        }
+    }
+
+    @ViewBuilder
     var body: some View {
-        if !urls.isEmpty {
+        if values.count == 1, let value = values.first {
+            mediaButton(value)
+                .frame(maxWidth: .infinity)
+                .frame(height: layout.singleHeight)
+                .fullScreenCover(item: $selected) { item in
+                    QuestionMediaPreview(item: item)
+                }
+        } else if !values.isEmpty {
             ScrollView(.horizontal) {
                 HStack(spacing: 10) {
-                    ForEach(urls, id: \.self) { value in
-                        Button {
-                            Haptics.selection()
-                            selected = SelectedMedia(value: value)
-                        } label: {
-                            QuestionMediaImage(value: value)
-                                .frame(maxWidth: 260, minHeight: 100, maxHeight: 220)
-                                .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("查看题目图片")
+                    ForEach(values, id: \.self) { value in
+                        mediaButton(value)
+                            .frame(width: layout.multipleSize.width, height: layout.multipleSize.height)
                     }
                 }
                 .padding(.vertical, 2)
@@ -30,6 +49,26 @@ struct QuestionMediaStrip: View {
                 QuestionMediaPreview(item: item)
             }
         }
+    }
+
+    private func mediaButton(_ value: String) -> some View {
+        Button {
+            Haptics.selection()
+            selected = SelectedMedia(value: value)
+        } label: {
+            QuestionMediaImage(value: value)
+                .padding(layout.imagePadding)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color(uiColor: .secondarySystemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: layout.cornerRadius, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: layout.cornerRadius, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.7)
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("查看题目图片")
+        .accessibilityHint("轻点可全屏查看并缩放")
     }
 }
 
@@ -89,6 +128,7 @@ private struct QuestionMediaPreview: View {
                 Color.black.ignoresSafeArea()
 
                 QuestionMediaImage(value: item.value)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .scaleEffect(clampedScale(scale * liveScale))
                     .offset(x: offset.width + liveOffset.width, y: offset.height + liveOffset.height)
                     .gesture(magnifyGesture.simultaneously(with: dragGesture))

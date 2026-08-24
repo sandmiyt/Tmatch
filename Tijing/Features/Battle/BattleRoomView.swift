@@ -235,7 +235,7 @@ struct BattleRoomView: View {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("第 \(state.questionIndex + 1) / \(state.total) 题")
                             .font(.headline)
-                        Text([question.subject, question.topic].filter { !$0.isEmpty }.joined(separator: " · "))
+                        Text([question.questionTypeLabel, question.subject, question.topic].filter { !$0.isEmpty }.joined(separator: " · "))
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer(minLength: 0)
@@ -277,7 +277,7 @@ struct BattleRoomView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .multilineTextAlignment(.leading)
                         if let mediaOptions = question.media?.options, index < mediaOptions.count {
-                            QuestionMediaStrip(urls: mediaOptions[index])
+                            QuestionMediaStrip(urls: mediaOptions[index], layout: .compact)
                                 .opacity(isExcluded ? 0.48 : 1)
                         }
                     }

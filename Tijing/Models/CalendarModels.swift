@@ -62,6 +62,19 @@ struct RecruitmentExam: Decodable, Identifiable, Hashable {
         case sourceExcerpt = "source_excerpt"
         case updatedAt = "updated_at"
     }
+
+    var provinceName: String {
+        region?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
+    var cityName: String {
+        let value = city?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return !value.isEmpty && value == provinceName ? "全省" : value
+    }
+
+    var areaLabel: String {
+        [provinceName, cityName].filter { !$0.isEmpty }.joined(separator: " · ")
+    }
 }
 
 struct ExamCalendarSummary: Decodable {

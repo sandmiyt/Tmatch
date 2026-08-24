@@ -4,6 +4,7 @@ import SafariServices
 struct ExamCalendarView: View {
     @Environment(SessionStore.self) private var session
     @State private var response: ExamCalendarResponse?
+    @State private var province = "全部"
     @State private var city = "全部"
     @State private var followedOnly = false
     @State private var loading = false
@@ -51,6 +52,7 @@ struct ExamCalendarView: View {
         .task(id: session.isAuthenticated) { await load() }
         .task(id: followedItems.map(\.id)) { await runFollowedCarousel() }
         .refreshable { await load() }
+        .sensoryFeedback(.selection, trigger: province)
         .sensoryFeedback(.selection, trigger: city)
         .sensoryFeedback(.selection, trigger: followedOnly)
         .sheet(item: $selectedExam) { exam in
@@ -67,19 +69,31 @@ struct ExamCalendarView: View {
     private var filteredItems: [RecruitmentExam] {
         guard let items = response?.items else { return [] }
         return items.filter { exam in
-            let matchesCity = city == "全部" || exam.city == city || exam.region == city
+            let matchesProvince = province == "全部" || exam.provinceName == province
+            let matchesCity = city == "全部" || exam.cityName == city
             let matchesFollow = !followedOnly || exam.followed == true
-            return matchesCity && matchesFollow
+            return matchesProvince && matchesCity && matchesFollow
         }
     }
 
-    private var availableCities: [ExamCity] {
-        if let cities = response?.cities, !cities.isEmpty { return cities }
-
-        let counts = Dictionary(grouping: response?.items ?? [], by: { $0.city ?? $0.region ?? "" })
+    private var availableProvinces: [ExamCity] {
+        let counts = Dictionary(grouping: response?.items ?? [], by: \.provinceName)
             .filter { !$0.key.isEmpty }
             .map { ExamCity(name: $0.key, count: $0.value.count) }
-        return counts.sorted { lhs, rhs in
+        return sortedAreas(counts)
+    }
+
+    private var availableCities: [ExamCity] {
+        guard province != "全部" else { return [] }
+        let provinceItems = (response?.items ?? []).filter { $0.provinceName == province }
+        let counts = Dictionary(grouping: provinceItems, by: \.cityName)
+            .filter { !$0.key.isEmpty }
+            .map { ExamCity(name: $0.key, count: $0.value.count) }
+        return sortedAreas(counts)
+    }
+
+    private func sortedAreas(_ areas: [ExamCity]) -> [ExamCity] {
+        areas.sorted { lhs, rhs in
             if lhs.count == rhs.count { return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending }
             return lhs.count > rhs.count
         }
@@ -107,14 +121,50 @@ struct ExamCalendarView: View {
             HStack(spacing: 9) {
                 Menu {
                     Button {
-                        withAnimation(.snappy(duration: 0.28)) { city = "全部" }
+                        withAnimation(.snappy(duration: 0.28)) {
+                            province = "全部"
+                            city = "全部"
+                        }
                     } label: {
-                        Label("全部地区", systemImage: city == "全部" ? "checkmark" : "location")
+                        Label("全部省份", systemImage: province == "全部" ? "checkmark" : "map")
                     }
 
-                    if !availableCities.isEmpty {
+                    if !availableProvinces.isEmpty {
                         Divider()
                     }
+
+                    ForEach(availableProvinces) { item in
+                        Button {
+                            withAnimation(.snappy(duration: 0.28)) {
+                                province = item.name
+                                city = "全部"
+                            }
+                        } label: {
+                            HStack {
+                                Text("\(item.name)（\(item.count)）")
+                                if province == item.name { Image(systemName: "checkmark") }
+                            }
+                        }
+                    }
+                } label: {
+                    filterChip(
+                        title: province == "全部" ? "选择省份" : province,
+                        systemImage: "map.fill",
+                        selected: province != "全部",
+                        tint: TijingDesign.indigo,
+                        showsChevron: true
+                    )
+                }
+                .buttonStyle(.plain)
+
+                Menu {
+                    Button {
+                        withAnimation(.snappy(duration: 0.28)) { city = "全部" }
+                    } label: {
+                        Label("全部城市", systemImage: city == "全部" ? "checkmark" : "location")
+                    }
+
+                    if !availableCities.isEmpty { Divider() }
 
                     ForEach(availableCities) { item in
                         Button {
@@ -128,33 +178,23 @@ struct ExamCalendarView: View {
                     }
                 } label: {
                     filterChip(
-                        title: city == "全部" ? "全部地区" : city,
+                        title: province == "全部" ? "先选省份" : (city == "全部" ? "全部城市" : city),
                         systemImage: "location.fill",
                         selected: city != "全部",
-                        tint: TijingDesign.indigo,
+                        tint: TijingDesign.cyan,
                         showsChevron: true
                     )
                 }
                 .buttonStyle(.plain)
-
-                Button {
-                    withAnimation(.snappy(duration: 0.28)) { followedOnly.toggle() }
-                    Haptics.selection()
-                } label: {
-                    filterChip(
-                        title: "只看关注",
-                        systemImage: followedOnly ? "star.fill" : "star",
-                        selected: followedOnly,
-                        tint: TijingDesign.amber
-                    )
-                }
-                .buttonStyle(.plain)
+                .disabled(province == "全部")
+                .opacity(province == "全部" ? 0.55 : 1)
 
                 Spacer(minLength: 0)
 
-                if city != "全部" || followedOnly {
+                if province != "全部" || city != "全部" || followedOnly {
                     Button {
                         withAnimation(.snappy(duration: 0.28)) {
+                            province = "全部"
                             city = "全部"
                             followedOnly = false
                         }
@@ -170,6 +210,22 @@ struct ExamCalendarView: View {
                     .accessibilityLabel("清除筛选")
                 }
             }
+
+            HStack(spacing: 9) {
+                Button {
+                    withAnimation(.snappy(duration: 0.28)) { followedOnly.toggle() }
+                    Haptics.selection()
+                } label: {
+                    filterChip(
+                        title: "只看关注",
+                        systemImage: followedOnly ? "star.fill" : "star",
+                        selected: followedOnly,
+                        tint: TijingDesign.amber
+                    )
+                }
+                .buttonStyle(.plain)
+                Spacer(minLength: 0)
+            }
         }
         .padding(14)
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 21, style: .continuous))
@@ -178,6 +234,7 @@ struct ExamCalendarView: View {
                 .strokeBorder(Color.primary.opacity(0.055))
         }
         .shadow(color: Color.black.opacity(0.035), radius: 12, y: 6)
+        .animation(.snappy(duration: 0.30), value: province)
         .animation(.snappy(duration: 0.30), value: city)
         .animation(.snappy(duration: 0.30), value: followedOnly)
     }
@@ -223,7 +280,7 @@ struct ExamCalendarView: View {
                     TijingStickerIcon(systemImage: "calendar", tint: TijingDesign.ink.opacity(0.70), background: tint, size: 40, rotation: index.isMultiple(of: 2) ? -5 : 5, sparkle: false)
                     VStack(alignment: .leading, spacing: 4) {
                         Text(exam.title).font(.headline)
-                        Text([exam.city, exam.examKind].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
+                        Text([exam.areaLabel, exam.examKind ?? ""].filter { !$0.isEmpty }.joined(separator: " · "))
                             .font(.caption).foregroundStyle(.secondary)
                         if let sourceName = exam.sourceName, !sourceName.isEmpty {
                             Text(sourceName)
@@ -414,7 +471,7 @@ private struct ExamDetailSheet: View {
                                 HStack(spacing: 10) {
                                     TijingStickerIcon(systemImage: "calendar.badge.clock", tint: TijingDesign.amber, background: TijingDesign.butter, size: 44, rotation: -6, sparkle: false)
                                     VStack(alignment: .leading, spacing: 3) {
-                                        Text(exam.city ?? "四川")
+                                        Text(exam.areaLabel.isEmpty ? "地区待补充" : exam.areaLabel)
                                             .font(.caption.weight(.semibold))
                                             .foregroundStyle(TijingDesign.amber)
                                         Text(exam.title)
@@ -524,4 +581,3 @@ private struct ExamInAppBrowser: UIViewControllerRepresentable {
 
     func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
 }
-

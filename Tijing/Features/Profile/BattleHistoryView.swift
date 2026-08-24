@@ -262,7 +262,7 @@ private struct BattleHistoryDetailView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         if optionMedia.indices.contains(index) {
-                            QuestionMediaStrip(urls: optionMedia[index])
+                            QuestionMediaStrip(urls: optionMedia[index], layout: .compact)
                         }
                     }
                     .padding(11)

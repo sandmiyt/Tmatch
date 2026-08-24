@@ -5,7 +5,7 @@ struct DailyChallengeView: View {
     let challengeID: String?
 
     @State private var detail: ChallengeDetail?
-    @State private var answers: [Int: Int] = [:]
+    @State private var answers: [Int: Set<Int>] = [:]
     @State private var excluded: [Int: Set<Int>] = [:]
     @State private var index = 0
     @State private var startedAt = Date()
@@ -109,11 +109,11 @@ struct DailyChallengeView: View {
             .padding()
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            challengeBottomBar(detail)
+            challengeBottomBar(detail, question: question)
         }
     }
 
-    private func challengeBottomBar(_ detail: ChallengeDetail) -> some View {
+    private func challengeBottomBar(_ detail: ChallengeDetail, question: ChallengeQuestion) -> some View {
         HStack(spacing: 12) {
             Button {
                 guard index > 0 else { return }
@@ -144,9 +144,15 @@ struct DailyChallengeView: View {
                     index = min(detail.questions.count - 1, index + 1)
                     Haptics.selection()
                 } label: {
-                    Label("下一题", systemImage: "chevron.right")
+                    if question.isMultiple {
+                        Text("确认答案（已选 \(answers[index]?.count ?? 0) 项）")
+                            .frame(maxWidth: .infinity, alignment: .center)
+                    } else {
+                        Label("下一题", systemImage: "chevron.right")
+                    }
                 }
                 .buttonStyle(.borderedProminent)
+                .disabled(question.isMultiple && (answers[index]?.isEmpty ?? true))
             }
         }
         .controlSize(.large)
@@ -165,7 +171,7 @@ struct DailyChallengeView: View {
                     VStack(alignment: .leading, spacing: 3) {
                         Text(detail.isDaily ? "今日挑战" : "好友挑战")
                             .font(.headline)
-                        Text([question.questionType == "judgment" ? "判断题" : "单选题", question.subject, question.topic]
+                        Text([question.questionTypeLabel, question.subject, question.topic]
                             .compactMap { $0?.isEmpty == false ? $0 : nil }.joined(separator: " · "))
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -181,18 +187,26 @@ struct DailyChallengeView: View {
     }
 
     private func challengeOption(question: ChallengeQuestion, optionIndex: Int) -> some View {
-        let isPicked = answers[index] == optionIndex
+        let isPicked = answers[index]?.contains(optionIndex) == true
         let isExcluded = excluded[question.questionID]?.contains(optionIndex) == true
 
         return Button {
             if suppressNextTap { suppressNextTap = false; return }
             guard !isExcluded else { return }
-            answers[index] = optionIndex
+            let currentIndex = index
+            if question.isMultiple {
+                var selected = answers[currentIndex] ?? []
+                if selected.contains(optionIndex) { selected.remove(optionIndex) }
+                else { selected.insert(optionIndex) }
+                answers[currentIndex] = selected
+            } else {
+                answers[currentIndex] = [optionIndex]
+            }
             Haptics.selection()
-            if let detail, index < detail.questions.count - 1 {
+            if !question.isMultiple, let detail, currentIndex < detail.questions.count - 1 {
                 Task { @MainActor in
                     try? await Task.sleep(for: .milliseconds(120))
-                    guard answers[index] == optionIndex else { return }
+                    guard index == currentIndex, answers[currentIndex] == Set([optionIndex]) else { return }
                     index = min(detail.questions.count - 1, index + 1)
                 }
             }
@@ -212,7 +226,7 @@ struct DailyChallengeView: View {
                         .foregroundStyle(isExcluded ? .secondary : .primary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     if let optionMedia = question.media?.options, optionIndex < optionMedia.count {
-                        QuestionMediaStrip(urls: optionMedia[optionIndex])
+                        QuestionMediaStrip(urls: optionMedia[optionIndex], layout: .compact)
                     }
                 }
             }
@@ -229,7 +243,7 @@ struct DailyChallengeView: View {
                 toggleExcluded(questionID: question.questionID, optionIndex: optionIndex)
             }
         )
-        .accessibilityHint("长按可排除或恢复该选项")
+        .accessibilityHint(question.isMultiple ? "轻点选择或取消，选好后确认答案；长按可排除或恢复" : "轻点作答，长按可排除或恢复该选项")
     }
 
     private func resultView(detail: ChallengeDetail, mine: ChallengeAttempt) -> some View {
@@ -369,10 +383,11 @@ struct DailyChallengeView: View {
             ForEach(Array(items.enumerated()), id: \.element.id) { offset, item in
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
-                        Text("第 \(offset + 1) 题 · \(item.subject ?? "") · \(item.topic ?? "")")
+                        Text(["第 \(offset + 1) 题", item.questionTypeLabel, item.subject, item.topic]
+                            .compactMap { $0?.isEmpty == false ? $0 : nil }.joined(separator: " · "))
                             .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                         Spacer()
-                        Text(item.picked < 0 ? "未作答" : item.correct ? "正确" : "错误")
+                        Text(item.selectedAnswers.isEmpty ? "未作答" : item.correct ? "正确" : "错误")
                             .font(.caption.bold())
                             .foregroundStyle(item.correct ? .green : .red)
                     }
@@ -383,20 +398,28 @@ struct DailyChallengeView: View {
                     Text(item.stem).tijingQuestionStem(compact: true)
                     QuestionMediaStrip(urls: item.media?.stem ?? [])
                     VStack(spacing: 7) {
+                        let correctAnswers = Set(item.correctAnswers)
+                        let selectedAnswers = Set(item.selectedAnswers)
                         ForEach(item.options.indices, id: \.self) { option in
-                            HStack(alignment: .top, spacing: 9) {
-                                Text(TijingFormat.optionLetter(option)).bold().frame(width: 24)
-                                Text(item.options[option]).frame(maxWidth: .infinity, alignment: .leading)
-                                if option == item.answer { Image(systemName: "checkmark.circle.fill").foregroundStyle(.green) }
-                                if option == item.picked && option != item.answer { Image(systemName: "xmark.circle.fill").foregroundStyle(.red) }
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack(alignment: .top, spacing: 9) {
+                                    Text(TijingFormat.optionLetter(option)).bold().frame(width: 24)
+                                    Text(item.options[option]).frame(maxWidth: .infinity, alignment: .leading)
+                                    if correctAnswers.contains(option) { Image(systemName: "checkmark.circle.fill").foregroundStyle(.green) }
+                                    if selectedAnswers.contains(option) && !correctAnswers.contains(option) { Image(systemName: "xmark.circle.fill").foregroundStyle(.red) }
+                                }
+                                if let optionMedia = item.media?.options, optionMedia.indices.contains(option) {
+                                    QuestionMediaStrip(urls: optionMedia[option], layout: .compact)
+                                }
                             }
                             .padding(10)
-                            .background(option == item.answer ? Color.green.opacity(0.09) : option == item.picked ? Color.red.opacity(0.07) : Color.clear, in: RoundedRectangle(cornerRadius: 10))
+                            .background(correctAnswers.contains(option) ? Color.green.opacity(0.09) : selectedAnswers.contains(option) ? Color.red.opacity(0.07) : Color.clear, in: RoundedRectangle(cornerRadius: 10))
                         }
                     }
                     if let explanation = item.explanation, !explanation.isEmpty {
                         Text(explanation).font(.subheadline).foregroundStyle(.secondary)
                     }
+                    QuestionMediaStrip(urls: item.media?.explanation ?? [])
                     HStack {
                         Button {
                             Task { await toggleReviewFavorite(questionID: item.questionID) }
@@ -449,7 +472,7 @@ struct DailyChallengeView: View {
 
     private func answerSheetColor(_ value: Int) -> Color {
         if value == index { return Color.accentColor.opacity(0.16) }
-        if answers[value] != nil { return Color.green.opacity(0.12) }
+        if answers[value]?.isEmpty == false { return Color.green.opacity(0.12) }
         return Color(uiColor: .secondarySystemBackground)
     }
 
@@ -470,14 +493,18 @@ struct DailyChallengeView: View {
     @MainActor
     private func submit(force: Bool) async {
         guard let token = session.token, let detail, !busy else { return }
-        let unanswered = detail.questions.indices.filter { answers[$0] == nil }.count
+        let unanswered = detail.questions.indices.filter { answers[$0]?.isEmpty != false }.count
         if unanswered > 0 && !force {
             confirmUnanswered = true
             Haptics.warning()
             return
         }
         busy = true; defer { busy = false }
-        let mapped = Dictionary(uniqueKeysWithValues: answers.map { (String($0.key), $0.value) })
+        let mapped = Dictionary(uniqueKeysWithValues: answers.compactMap { key, value -> (String, PickValue)? in
+            guard !value.isEmpty else { return nil }
+            let sorted = value.sorted()
+            return (String(key), detail.questions[key].isMultiple ? .many(sorted) : .one(sorted[0]))
+        })
         let elapsed = max(0, Int(Date().timeIntervalSince(startedAt) * 1000))
         do {
             let response: ChallengeDetail = try await session.api.request("/api/challenges/\(detail.challengeID)/submit", method: .post, body: ChallengeSubmitBody(answers: mapped, elapsedMS: elapsed), token: token)
@@ -505,7 +532,10 @@ struct DailyChallengeView: View {
         if set.contains(optionIndex) { set.remove(optionIndex) }
         else { set.insert(optionIndex) }
         excluded[questionID] = set
-        if answers[index] == optionIndex { answers.removeValue(forKey: index) }
+        if var selected = answers[index], selected.remove(optionIndex) != nil {
+            if selected.isEmpty { answers.removeValue(forKey: index) }
+            else { answers[index] = selected }
+        }
         Haptics.light()
     }
 

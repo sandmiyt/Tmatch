@@ -69,6 +69,12 @@ struct Question: Codable, Identifiable, Hashable {
         ["judgment", "judgement", "judge", "true_false", "truefalse", "boolean", "bool", "判断", "判断题"].contains(normalizedQuestionType)
     }
 
+    var questionTypeLabel: String {
+        if isMultiple { return "多选题" }
+        if isJudgment { return "判断题" }
+        return "单选题"
+    }
+
     func preparedForDisplay() -> Question {
         let cleaned = Self.cleanOptionLabels(options)
         var copy = self

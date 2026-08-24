@@ -89,6 +89,11 @@ struct PracticeSessionView: View {
                                     .foregroundStyle(.secondary)
                                 Text("第 \(store.index + 1) 题")
                                     .font(.title3.bold())
+                                Text([question.questionTypeLabel, question.subject, question.topic]
+                                    .filter { !$0.isEmpty }.joined(separator: " · "))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
                             }
                             Spacer()
                             TijingMicroBadge(title: store.progressText, systemImage: "circle.grid.3x3.fill", tint: TijingDesign.indigo)
@@ -485,7 +490,7 @@ private struct OptionRow: View {
                     .strikethrough(excluded)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            QuestionMediaStrip(urls: media)
+            QuestionMediaStrip(urls: media, layout: .compact)
         }
         .padding(14)
         .background(background, in: RoundedRectangle(cornerRadius: 19, style: .continuous))
@@ -663,7 +668,7 @@ private struct PracticeBatchResultView: View {
                                                 .fill(item.correct ? TijingDesign.mint : TijingDesign.coral)
                                                 .frame(width: 4)
                                             VStack(alignment: .leading, spacing: 6) {
-                                                Text("第 \(offset + 1) 题 · \(item.correct ? "正确" : "错误")")
+                                                Text("第 \(offset + 1) 题 · \(question(item.questionID)?.questionTypeLabel ?? "题型未知") · \(item.correct ? "正确" : "错误")")
                                                     .font(.subheadline.weight(.semibold))
                                                 Text(item.stem ?? question(item.questionID)?.stem ?? "题目")
                                                     .tijingQuestionStem(compact: true)

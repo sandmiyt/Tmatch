@@ -212,6 +212,29 @@ struct ChallengeQuestion: Decodable, Identifiable, Hashable {
     var favorite: Bool?
 
     var id: Int { questionID }
+
+    private var normalizedQuestionType: String {
+        (questionType ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "-", with: "_")
+            .replacingOccurrences(of: " ", with: "_")
+    }
+
+    var isMultiple: Bool {
+        ["multiple", "multi", "multiple_choice", "multiplechoice", "multiple_select", "multiselect", "多选", "多选题"].contains(normalizedQuestionType)
+    }
+
+    var isJudgment: Bool {
+        ["judgment", "judgement", "judge", "true_false", "truefalse", "boolean", "bool", "判断", "判断题"].contains(normalizedQuestionType)
+    }
+
+    var questionTypeLabel: String {
+        if isMultiple { return "多选题" }
+        if isJudgment { return "判断题" }
+        return "单选题"
+    }
+
     enum CodingKeys: String, CodingKey {
         case stem, material, options, media, subject, topic, favorite
         case questionID = "question_id"
@@ -272,7 +295,9 @@ struct ChallengeReviewItem: Decodable, Identifiable, Hashable {
     let media: QuestionMediaData?
     let questionType: String?
     let answer: Int
+    let answers: [Int]?
     let picked: Int
+    let picks: [Int]?
     let correct: Bool
     let explanation: String?
     let subject: String?
@@ -280,15 +305,32 @@ struct ChallengeReviewItem: Decodable, Identifiable, Hashable {
     var favorite: Bool?
 
     var id: Int { questionID }
+    var correctAnswers: [Int] { answers?.isEmpty == false ? answers!.sorted() : (answer >= 0 ? [answer] : []) }
+    var selectedAnswers: [Int] { picks?.isEmpty == false ? picks!.sorted() : (picked >= 0 ? [picked] : []) }
+
+    private var normalizedQuestionType: String {
+        (questionType ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "-", with: "_")
+            .replacingOccurrences(of: " ", with: "_")
+    }
+
+    var questionTypeLabel: String {
+        if ["multiple", "multi", "multiple_choice", "multiplechoice", "multiple_select", "multiselect", "多选", "多选题"].contains(normalizedQuestionType) || correctAnswers.count > 1 { return "多选题" }
+        if ["judgment", "judgement", "judge", "true_false", "truefalse", "boolean", "bool", "判断", "判断题"].contains(normalizedQuestionType) { return "判断题" }
+        return "单选题"
+    }
+
     enum CodingKeys: String, CodingKey {
-        case stem, material, options, media, answer, picked, correct, explanation, subject, topic, favorite
+        case stem, material, options, media, answer, answers, picked, picks, correct, explanation, subject, topic, favorite
         case questionID = "question_id"
         case questionType = "question_type"
     }
 }
 
 struct ChallengeSubmitBody: Encodable {
-    let answers: [String: Int]
+    let answers: [String: PickValue]
     let elapsedMS: Int
     enum CodingKeys: String, CodingKey { case answers; case elapsedMS = "elapsed_ms" }
 }

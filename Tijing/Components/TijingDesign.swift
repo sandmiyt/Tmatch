@@ -663,9 +663,9 @@ private struct TijingQuestionStemModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .font(compact ? .subheadline : .body)
+            .font(compact ? .system(size: 16, weight: .regular) : .system(size: 18, weight: .regular))
             .fontWeight(.regular)
-            .lineSpacing(compact ? 4 : 7)
+            .lineSpacing(compact ? 4 : 6)
             .multilineTextAlignment(.leading)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -675,7 +675,7 @@ private struct TijingQuestionStemModifier: ViewModifier {
 private struct TijingQuestionMaterialModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
-            .font(.body)
+            .font(.system(size: 17, weight: .regular))
             .fontWeight(.regular)
             .lineSpacing(7)
             .multilineTextAlignment(.leading)
