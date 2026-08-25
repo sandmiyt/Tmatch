@@ -79,29 +79,18 @@ struct Question: Codable, Identifiable, Hashable {
         let cleaned = Self.cleanOptionLabels(options)
         var copy = self
         copy.options = cleaned
-        guard !isJudgment, cleaned.count > 1 else {
-            copy.optionOrder = Array(cleaned.indices)
-            return copy
-        }
 
-        var order = Array(cleaned.indices)
-        for i in stride(from: order.count - 1, through: 1, by: -1) {
-            let j = Int.random(in: 0...i)
-            if i != j { order.swapAt(i, j) }
-        }
-        if order.enumerated().allSatisfy({ $0.offset == $0.element }), let first = order.first {
-            order.removeFirst()
-            order.append(first)
-        }
-
-        copy.optionOrder = order
-        copy.options = order.map { cleaned[$0] }
-        if let mediaOptions = media?.options {
-            var newMedia = media
-            newMedia?.options = order.map { index in index < mediaOptions.count ? mediaOptions[index] : [] }
-            copy.media = newMedia
-        }
+        // Keep the server/database option order unchanged.
+        // The old client-side shuffle required every answer/explanation path to remap
+        // indices perfectly; a missed remap could make the shown correct option disagree
+        // with the explanation. Identity order keeps submission and review aligned.
+        copy.optionOrder = Array(cleaned.indices)
         return copy
+    }
+
+    static func shouldShowOptionText(_ value: String, hasMedia: Bool) -> Bool {
+        _ = hasMedia
+        return !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     static func cleanOptionLabels(_ values: [String]) -> [String] {

@@ -112,6 +112,13 @@ private struct QuestionMediaItem: Identifiable, Hashable {
     var id: String { value }
 }
 
+struct QuestionContentBlock: Hashable {
+    let type: String
+    let text: String?
+    let url: String?
+    let mediaType: String?
+}
+
 enum QuestionRichContentStyle: Equatable {
     case stem
     case compactStem
