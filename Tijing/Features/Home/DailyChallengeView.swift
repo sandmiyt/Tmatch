@@ -198,6 +198,18 @@ struct DailyChallengeView: View {
     private func challengeOption(question: ChallengeQuestion, optionIndex: Int) -> some View {
         let isPicked = answers[index]?.contains(optionIndex) == true
         let isExcluded = excluded[question.questionID]?.contains(optionIndex) == true
+        let optionMedia: [String]
+        if let values = question.media?.options, values.indices.contains(optionIndex) {
+            optionMedia = values[optionIndex]
+        } else {
+            optionMedia = []
+        }
+        let optionBlocks: [QuestionContentBlock]
+        if let values = question.optionBlocks, values.indices.contains(optionIndex) {
+            optionBlocks = values[optionIndex]
+        } else {
+            optionBlocks = []
+        }
 
         return Button {
             if suppressNextTap { suppressNextTap = false; return }
@@ -229,8 +241,8 @@ struct DailyChallengeView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     QuestionRichContent(
                         text: question.options[optionIndex],
-                        urls: (question.media?.options?.indices.contains(optionIndex) == true ? question.media?.options?[optionIndex] : []) ?? [],
-                        blocks: question.optionBlocks?.indices.contains(optionIndex) == true ? (question.optionBlocks?[optionIndex] ?? []) : [],
+                        urls: optionMedia,
+                        blocks: optionBlocks,
                         style: .option
                     )
                     .strikethrough(isExcluded)

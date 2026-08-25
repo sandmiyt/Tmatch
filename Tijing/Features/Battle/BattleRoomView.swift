@@ -269,6 +269,14 @@ struct BattleRoomView: View {
                 let isExcluded = store.excluded.contains(index)
                 let isSelected = question.isMultiple ? store.multipleSelection.contains(index) : store.selected == index
                 let isLocked = state.myFeedback != nil || store.isSubmittingAnswer
+                let optionMedia: [String] = {
+                    guard let values = question.media?.options, values.indices.contains(index) else { return [] }
+                    return values[index]
+                }()
+                let optionBlocks: [QuestionContentBlock] = {
+                    guard let values = question.optionBlocks, values.indices.contains(index) else { return [] }
+                    return values[index]
+                }()
 
                 HStack(alignment: .top, spacing: 12) {
                     Text(battleOptionLabel(question, index: index))
@@ -279,8 +287,8 @@ struct BattleRoomView: View {
                     VStack(alignment: .leading, spacing: 7) {
                         QuestionRichContent(
                             text: options[index],
-                            urls: (question.media?.options?.indices.contains(index) == true ? question.media?.options?[index] : []) ?? [],
-                            blocks: question.optionBlocks?.indices.contains(index) == true ? (question.optionBlocks?[index] ?? []) : [],
+                            urls: optionMedia,
+                            blocks: optionBlocks,
                             style: .option
                         )
                         .foregroundStyle(isExcluded ? .secondary : .primary)

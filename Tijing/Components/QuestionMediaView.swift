@@ -112,11 +112,16 @@ private struct QuestionMediaItem: Identifiable, Hashable {
     var id: String { value }
 }
 
-struct QuestionContentBlock: Hashable {
+struct QuestionContentBlock: Codable, Hashable {
     let type: String
     let text: String?
     let url: String?
     let mediaType: String?
+
+    enum CodingKeys: String, CodingKey {
+        case type, text, url
+        case mediaType = "media_type"
+    }
 }
 
 enum QuestionRichContentStyle: Equatable {

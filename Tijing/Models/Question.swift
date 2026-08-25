@@ -1,17 +1,5 @@
 import Foundation
 
-struct QuestionContentBlock: Codable, Hashable {
-    var type: String
-    var text: String?
-    var url: String?
-    var mediaType: String?
-
-    enum CodingKeys: String, CodingKey {
-        case type, text, url
-        case mediaType = "media_type"
-    }
-}
-
 struct QuestionMediaData: Codable, Hashable {
     var stem: [String]?
     var material: [String]?
