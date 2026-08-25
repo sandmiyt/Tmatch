@@ -206,15 +206,15 @@ struct ChallengeQuestion: Decodable, Identifiable, Hashable {
     let material: String?
     let options: [String]
     let media: QuestionMediaData?
-    let stemBlocks: [QuestionContentBlock]?
-    let materialBlocks: [QuestionContentBlock]?
-    let optionBlocks: [[QuestionContentBlock]]?
     let questionType: String?
     let subject: String?
     let topic: String?
     var favorite: Bool?
 
     var id: Int { questionID }
+    var stemBlocks: [QuestionContentBlock]? { media?.layout?.stem }
+    var materialBlocks: [QuestionContentBlock]? { media?.layout?.material }
+    var optionBlocks: [[QuestionContentBlock]]? { media?.layout?.options }
 
     private var normalizedQuestionType: String {
         (questionType ?? "")
@@ -240,9 +240,6 @@ struct ChallengeQuestion: Decodable, Identifiable, Hashable {
 
     enum CodingKeys: String, CodingKey {
         case stem, material, options, media, subject, topic, favorite
-        case stemBlocks = "stem_blocks"
-        case materialBlocks = "material_blocks"
-        case optionBlocks = "option_blocks"
         case questionID = "question_id"
         case questionType = "question_type"
     }

@@ -112,18 +112,6 @@ private struct QuestionMediaItem: Identifiable, Hashable {
     var id: String { value }
 }
 
-struct QuestionContentBlock: Codable, Hashable {
-    let type: String
-    let text: String?
-    let url: String?
-    let mediaType: String?
-
-    enum CodingKeys: String, CodingKey {
-        case type, text, url
-        case mediaType = "media_type"
-    }
-}
-
 enum QuestionRichContentStyle: Equatable {
     case stem
     case compactStem
@@ -170,7 +158,8 @@ struct QuestionRichContent: View {
             if block.type == "image", let url = block.url, !url.isEmpty {
                 let declaredType = (block.mediaType ?? "").lowercased()
                 let loweredURL = url.lowercased()
-                let isFormula = declaredType == "formula"
+                let isFormula = block.inline == true
+                    || declaredType == "formula"
                     || loweredURL.contains("/accessories/formulas")
                     || loweredURL.contains("/formulas?")
                 if isFormula {
@@ -214,23 +203,19 @@ struct QuestionRichContent: View {
 
     private var blockContent: some View {
         VStack(alignment: .leading, spacing: style == .option ? 5 : 7) {
-            if blocks.isEmpty, !urls.isEmpty {
-                QuestionLegacyRichContent(text: text, urls: urls, style: style)
-            } else {
-                ForEach(renderBlocks) { block in
-                    if !block.inlineParts.isEmpty {
-                        if block.inlineParts.contains(where: { $0.isFormula }) {
-                            QuestionInlineRichText(parts: block.inlineParts, style: style)
-                        } else if !block.plainText.isEmpty {
-                            styledText(block.plainText)
-                        }
-                    } else if !block.urls.isEmpty {
-                        QuestionMediaStrip(
-                            urls: block.urls,
-                            types: block.types,
-                            layout: style == .option || style == .compactStem ? .compact : .standard
-                        )
+            ForEach(renderBlocks) { block in
+                if !block.inlineParts.isEmpty {
+                    if block.inlineParts.contains(where: { $0.isFormula }) {
+                        QuestionInlineRichText(parts: block.inlineParts, style: style)
+                    } else if !block.plainText.isEmpty {
+                        styledText(block.plainText)
                     }
+                } else if !block.urls.isEmpty {
+                    QuestionMediaStrip(
+                        urls: block.urls,
+                        types: block.types,
+                        layout: style == .option || style == .compactStem ? .compact : .standard
+                    )
                 }
             }
         }
@@ -258,201 +243,6 @@ struct QuestionRichContent: View {
                 .fontWeight(.regular)
                 .lineSpacing(5)
                 .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-}
-
-
-private struct QuestionLegacyRichContent: View {
-    let text: String
-    let urls: [String]
-    let style: QuestionRichContentStyle
-
-    @State private var images: [String: UIImage] = [:]
-    @State private var resolvedURLs = Set<String>()
-
-    private var normalizedURLs: [String] {
-        var seen = Set<String>()
-        return urls.compactMap { raw in
-            let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !value.isEmpty, seen.insert(value).inserted else { return nil }
-            return value
-        }
-    }
-
-    private var inlineURLs: [String] {
-        normalizedURLs.filter { value in
-            if Self.isKnownFormulaURL(value) { return true }
-            guard let image = images[value] else { return false }
-            return Self.isLikelyInlineFormula(image)
-        }
-    }
-
-    private var reconstruction: LegacyInlineReconstruction {
-        LegacyInlineReconstructor.reconstruct(text: text, urls: inlineURLs)
-    }
-
-    private var trailingURLs: [String] {
-        let placed = Set(reconstruction.placedURLs)
-        return normalizedURLs.filter { value in
-            guard resolvedURLs.contains(value) || Self.isKnownFormulaURL(value) else { return false }
-            return !placed.contains(value)
-        }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: style == .option ? 5 : 7) {
-            if reconstruction.placedURLs.isEmpty {
-                styledText(text)
-            } else {
-                QuestionInlineTextView(parts: reconstruction.parts, images: images, style: style)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            if !trailingURLs.isEmpty {
-                QuestionMediaStrip(
-                    urls: trailingURLs,
-                    layout: style == .option || style == .compactStem ? .compact : .standard
-                )
-            }
-        }
-        .task(id: normalizedURLs) {
-            for value in normalizedURLs where !resolvedURLs.contains(value) {
-                guard !Task.isCancelled else { return }
-                if let image = await loadQuestionMediaImage(value) {
-                    images[value] = image
-                }
-                resolvedURLs.insert(value)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func styledText(_ value: String) -> some View {
-        switch style {
-        case .stem:
-            Text(value).tijingQuestionStem()
-        case .compactStem:
-            Text(value).tijingQuestionStem(compact: true)
-        case .material:
-            Text(value).tijingQuestionMaterial()
-        case .option:
-            Text(value)
-                .font(.body)
-                .fontWeight(.regular)
-                .lineSpacing(3)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        case .explanation:
-            Text(value)
-                .font(.body)
-                .fontWeight(.regular)
-                .lineSpacing(5)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
-    private static func isKnownFormulaURL(_ value: String) -> Bool {
-        let lowered = value.lowercased()
-        return lowered.contains("/accessories/formulas")
-            || lowered.contains("/formulas?")
-            || lowered.contains("formula")
-    }
-
-    private static func isLikelyInlineFormula(_ image: UIImage) -> Bool {
-        let width = image.size.width
-        let height = image.size.height
-        guard width > 0, height > 0 else { return false }
-
-        // 老题库中的百分比、数字和短公式通常都是矮而窄的小图；
-        // 图表/材料插图尺寸明显更大，因此仍保留块级展示。
-        if height <= 90, width <= 480 { return true }
-        if height <= 140, width <= 600, width / height <= 12 { return true }
-        return false
-    }
-}
-
-private struct LegacyInlineReconstruction {
-    let parts: [QuestionInlinePart]
-    let placedURLs: [String]
-}
-
-private enum LegacyInlineReconstructor {
-    static func reconstruct(text: String, urls: [String]) -> LegacyInlineReconstruction {
-        guard !text.isEmpty, !urls.isEmpty else {
-            return LegacyInlineReconstruction(parts: text.isEmpty ? [] : [.text(text)], placedURLs: [])
-        }
-
-        let insertionOffsets = candidateOffsets(in: text)
-        let count = min(insertionOffsets.count, urls.count)
-        guard count > 0 else {
-            return LegacyInlineReconstruction(parts: [.text(text)], placedURLs: [])
-        }
-
-        let nsText = text as NSString
-        var parts: [QuestionInlinePart] = []
-        var cursor = 0
-        for index in 0..<count {
-            let offset = insertionOffsets[index]
-            guard offset >= cursor, offset <= nsText.length else { continue }
-            let length = offset - cursor
-            if length > 0 {
-                parts.append(.text(nsText.substring(with: NSRange(location: cursor, length: length))))
-            }
-            parts.append(.formula(urls[index]))
-            cursor = offset
-        }
-        if cursor < nsText.length {
-            parts.append(.text(nsText.substring(from: cursor)))
-        }
-        return LegacyInlineReconstruction(parts: parts, placedURLs: Array(urls.prefix(count)))
-    }
-
-    private static func candidateOffsets(in text: String) -> [Int] {
-        var offsets: [Int] = []
-        var seen = Set<Int>()
-
-        // 第一优先级：统计材料中最常见的“增长/下降/提高……”后紧跟标点，
-        // 这正是旧接口把百分比图片剥离后留下的位置。
-        appendMatches(
-            pattern: #"(?:增长|下降|提高|上升|降低|回落|增加|减少|扩大|收窄|提升)(?=\s*[，,。.;；、：:）)\]】]|\s*$)"#,
-            text: text,
-            offsets: &offsets,
-            seen: &seen
-        )
-
-        // 第二优先级：诸如“占……的，”“占比，”后原本也是百分比图片。
-        appendMatches(
-            pattern: #"(?:占[^，。；\n]{1,24}的|占比)(?=\s*[，,。.;；、：:）)\]】]|\s*$)"#,
-            text: text,
-            offsets: &offsets,
-            seen: &seen
-        )
-
-        // 最后才考虑“为/达”，避免在普通叙述中过早误插。
-        appendMatches(
-            pattern: #"(?:为|达)(?=\s*[，,。.;；、：:）)\]】]|\s*$)"#,
-            text: text,
-            offsets: &offsets,
-            seen: &seen
-        )
-
-        return offsets.sorted()
-    }
-
-    private static func appendMatches(
-        pattern: String,
-        text: String,
-        offsets: inout [Int],
-        seen: inout Set<Int>
-    ) {
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return }
-        let nsText = text as NSString
-        let range = NSRange(location: 0, length: nsText.length)
-        for match in regex.matches(in: text, range: range) {
-            let offset = NSMaxRange(match.range)
-            if seen.insert(offset).inserted {
-                offsets.append(offset)
-            }
         }
     }
 }

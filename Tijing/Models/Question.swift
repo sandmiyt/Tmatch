@@ -1,5 +1,33 @@
 import Foundation
 
+struct QuestionContentBlock: Codable, Hashable {
+    var type: String
+    var text: String?
+    var src: String?
+    var inline: Bool?
+
+    var url: String? { src }
+    var mediaType: String? { inline == true ? "formula" : nil }
+
+    init(type: String, text: String? = nil, url: String? = nil, mediaType: String? = nil) {
+        self.type = type
+        self.text = text
+        self.src = url
+        self.inline = mediaType == "formula" ? true : nil
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case type, text, src, inline
+    }
+}
+
+struct QuestionMediaLayoutData: Codable, Hashable {
+    var stem: [QuestionContentBlock]?
+    var material: [QuestionContentBlock]?
+    var options: [[QuestionContentBlock]]?
+    var explanation: [QuestionContentBlock]?
+}
+
 struct QuestionMediaData: Codable, Hashable {
     var stem: [String]?
     var material: [String]?
@@ -8,9 +36,10 @@ struct QuestionMediaData: Codable, Hashable {
     var count: Int?
     var cachedCount: Int?
     var externalCount: Int?
+    var layout: QuestionMediaLayoutData?
 
     enum CodingKeys: String, CodingKey {
-        case stem, material, options, explanation, count
+        case stem, material, options, explanation, count, layout
         case cachedCount = "cached_count"
         case externalCount = "external_count"
     }
@@ -41,10 +70,11 @@ struct Question: Codable, Identifiable, Hashable {
     var sourceDetail: String?
     var keypoints: [String]?
     var favorite: Bool?
-    var stemBlocks: [QuestionContentBlock]?
-    var materialBlocks: [QuestionContentBlock]?
-    var optionBlocks: [[QuestionContentBlock]]?
-    var explanationBlocks: [QuestionContentBlock]?
+
+    var stemBlocks: [QuestionContentBlock]? { media?.layout?.stem }
+    var materialBlocks: [QuestionContentBlock]? { media?.layout?.material }
+    var optionBlocks: [[QuestionContentBlock]]? { media?.layout?.options }
+    var explanationBlocks: [QuestionContentBlock]? { media?.layout?.explanation }
 
     enum CodingKeys: String, CodingKey {
         case id, stem, material, options, media, subject, topic, difficulty, source, answer, answers, explanation, year, region, exam, status, favorite
@@ -55,10 +85,6 @@ struct Question: Codable, Identifiable, Hashable {
         case mostWrong = "most_wrong"
         case sourceDetail = "source_detail"
         case keypoints
-        case stemBlocks = "stem_blocks"
-        case materialBlocks = "material_blocks"
-        case optionBlocks = "option_blocks"
-        case explanationBlocks = "explanation_blocks"
     }
 
     private var normalizedQuestionType: String {
@@ -161,7 +187,7 @@ struct AnswerFeedback: Codable, Hashable {
     let mostWrong: Int?
     let sourceDetail: String?
     let keypoints: [String]?
-    let explanationBlocks: [QuestionContentBlock]?
+    var explanationBlocks: [QuestionContentBlock]? { media?.layout?.explanation }
 
     enum CodingKeys: String, CodingKey {
         case correct, answer, answers, explanation, media, favorite, keypoints
@@ -170,7 +196,6 @@ struct AnswerFeedback: Codable, Hashable {
         case totalCount = "total_count"
         case mostWrong = "most_wrong"
         case sourceDetail = "source_detail"
-        case explanationBlocks = "explanation_blocks"
     }
 }
 
