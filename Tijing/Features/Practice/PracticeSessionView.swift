@@ -113,17 +113,25 @@ struct PracticeSessionView: View {
                             Label("材料", systemImage: "doc.text.fill")
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(TijingDesign.amber)
-                            Text(material)
-                                .tijingQuestionMaterial()
-                            QuestionMediaStrip(urls: question.media?.material ?? [])
+                            QuestionRichContent(
+                                text: material,
+                                urls: question.media?.material ?? [],
+                                blocks: question.materialBlocks ?? [],
+                                style: .material
+                            )
                         }
                     }
                 }
 
                 VStack(alignment: .leading, spacing: 12) {
-                    TijingQuestionStemBlock(text: question.stem, tint: TijingDesign.violet)
-                        .textSelection(.disabled)
-                    QuestionMediaStrip(urls: question.media?.stem ?? [])
+                    QuestionRichContent(
+                        text: question.stem,
+                        urls: question.media?.stem ?? [],
+                        blocks: question.stemBlocks ?? [],
+                        style: .stem,
+                        tint: TijingDesign.violet
+                    )
+                    .textSelection(.disabled)
                 }
 
                 VStack(spacing: 12) {
@@ -132,6 +140,7 @@ struct PracticeSessionView: View {
                             letter: TijingFormat.optionLetter(index),
                             text: question.options[index],
                             media: optionMedia(question, index: index),
+                            blocks: question.optionBlocks?[index] ?? [],
                             state: optionState(question, displayIndex: index),
                             excluded: store.excludedIndices(for: question).contains(index),
                             tap: { Task { await store.tapOption(index) } },
@@ -469,6 +478,7 @@ private struct OptionRow: View {
     let letter: String
     let text: String
     let media: [String]
+    let blocks: [QuestionContentBlock]
     let state: OptionVisualState
     let excluded: Bool
     let tap: () -> Void
@@ -482,15 +492,16 @@ private struct OptionRow: View {
                     .frame(width: 30, height: 30)
                     .background(circleBackground, in: Circle())
                     .foregroundStyle(circleForeground)
-                Text(text)
-                    .font(.body)
-                    .fontWeight(.regular)
-                    .lineSpacing(3)
-                    .foregroundStyle(excluded ? .secondary : .primary)
-                    .strikethrough(excluded)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                QuestionRichContent(
+                    text: text,
+                    urls: media,
+                    blocks: blocks,
+                    style: .option
+                )
+                .foregroundStyle(excluded ? .secondary : .primary)
+                .strikethrough(excluded)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            QuestionMediaStrip(urls: media, layout: .compact)
         }
         .padding(14)
         .background(background, in: RoundedRectangle(cornerRadius: 19, style: .continuous))
@@ -544,8 +555,12 @@ private struct FeedbackCard: View {
 
             if let explanation = feedback.explanation, !explanation.isEmpty {
                 Text("解析").font(.headline)
-                Text(remapExplanation(explanation)).font(.body).fontWeight(.regular).lineSpacing(5)
-                QuestionMediaStrip(urls: feedback.media?.explanation ?? [])
+                QuestionRichContent(
+                    text: remapExplanation(explanation),
+                    urls: feedback.media?.explanation ?? [],
+                    blocks: feedback.explanationBlocks ?? [],
+                    style: .explanation
+                )
             }
 
             if let keypoints = feedback.keypoints, !keypoints.isEmpty {

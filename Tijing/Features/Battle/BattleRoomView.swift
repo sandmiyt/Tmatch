@@ -248,13 +248,22 @@ struct BattleRoomView: View {
                         Label("材料", systemImage: "doc.text.fill")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(TijingDesign.amber)
-                        Text(material).tijingQuestionMaterial()
-                        QuestionMediaStrip(urls: question.media?.material ?? [])
+                        QuestionRichContent(
+                            text: material,
+                            urls: question.media?.material ?? [],
+                            blocks: question.materialBlocks ?? [],
+                            style: .material
+                        )
                     }
                 }
             }
-            TijingQuestionStemBlock(text: question.stem, tint: TijingDesign.violet)
-            QuestionMediaStrip(urls: question.media?.stem ?? [])
+            QuestionRichContent(
+                text: question.stem,
+                urls: question.media?.stem ?? [],
+                blocks: question.stemBlocks ?? [],
+                style: .stem,
+                tint: TijingDesign.violet
+            )
 
             ForEach(options.indices, id: \.self) { index in
                 let isExcluded = store.excluded.contains(index)
@@ -268,18 +277,17 @@ struct BattleRoomView: View {
                         .frame(width: 28, height: 28)
                         .background(.secondary.opacity(isExcluded ? 0.07 : 0.12), in: Circle())
                     VStack(alignment: .leading, spacing: 7) {
-                        Text(options[index])
-                            .font(.body)
-                            .fontWeight(.regular)
-                            .lineSpacing(3)
-                            .foregroundStyle(isExcluded ? .secondary : .primary)
-                            .strikethrough(isExcluded)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .multilineTextAlignment(.leading)
-                        if let mediaOptions = question.media?.options, index < mediaOptions.count {
-                            QuestionMediaStrip(urls: mediaOptions[index], layout: .compact)
-                                .opacity(isExcluded ? 0.48 : 1)
-                        }
+                        QuestionRichContent(
+                            text: options[index],
+                            urls: (question.media?.options?.indices.contains(index) == true ? question.media?.options?[index] : []) ?? [],
+                            blocks: question.optionBlocks?.indices.contains(index) == true ? (question.optionBlocks?[index] ?? []) : [],
+                            style: .option
+                        )
+                        .foregroundStyle(isExcluded ? .secondary : .primary)
+                        .strikethrough(isExcluded)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .multilineTextAlignment(.leading)
+                        .opacity(isExcluded ? 0.48 : 1)
                     }
                     if isExcluded, state.myFeedback == nil {
                         Image(systemName: "minus.circle.fill")
@@ -337,8 +345,13 @@ struct BattleRoomView: View {
                 if let explanation = feedback.explanation, !explanation.isEmpty {
                     VStack(alignment: .leading, spacing: 7) {
                         Text("答案解析").font(.subheadline.bold())
-                        Text(explanation).font(.subheadline).foregroundStyle(.secondary)
-                        QuestionMediaStrip(urls: question.media?.explanation ?? [])
+                        QuestionRichContent(
+                            text: explanation,
+                            urls: question.media?.explanation ?? [],
+                            blocks: question.explanationBlocks ?? [],
+                            style: .explanation
+                        )
+                        .foregroundStyle(.secondary)
                     }
                     .padding(13)
                     .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 13, style: .continuous))

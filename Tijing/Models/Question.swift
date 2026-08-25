@@ -1,5 +1,17 @@
 import Foundation
 
+struct QuestionContentBlock: Codable, Hashable {
+    var type: String
+    var text: String?
+    var url: String?
+    var mediaType: String?
+
+    enum CodingKeys: String, CodingKey {
+        case type, text, url
+        case mediaType = "media_type"
+    }
+}
+
 struct QuestionMediaData: Codable, Hashable {
     var stem: [String]?
     var material: [String]?
@@ -41,6 +53,10 @@ struct Question: Codable, Identifiable, Hashable {
     var sourceDetail: String?
     var keypoints: [String]?
     var favorite: Bool?
+    var stemBlocks: [QuestionContentBlock]?
+    var materialBlocks: [QuestionContentBlock]?
+    var optionBlocks: [[QuestionContentBlock]]?
+    var explanationBlocks: [QuestionContentBlock]?
 
     enum CodingKeys: String, CodingKey {
         case id, stem, material, options, media, subject, topic, difficulty, source, answer, answers, explanation, year, region, exam, status, favorite
@@ -51,6 +67,10 @@ struct Question: Codable, Identifiable, Hashable {
         case mostWrong = "most_wrong"
         case sourceDetail = "source_detail"
         case keypoints
+        case stemBlocks = "stem_blocks"
+        case materialBlocks = "material_blocks"
+        case optionBlocks = "option_blocks"
+        case explanationBlocks = "explanation_blocks"
     }
 
     private var normalizedQuestionType: String {
@@ -79,18 +99,8 @@ struct Question: Codable, Identifiable, Hashable {
         let cleaned = Self.cleanOptionLabels(options)
         var copy = self
         copy.options = cleaned
-
-        // Keep the server/database option order unchanged.
-        // The old client-side shuffle required every answer/explanation path to remap
-        // indices perfectly; a missed remap could make the shown correct option disagree
-        // with the explanation. Identity order keeps submission and review aligned.
         copy.optionOrder = Array(cleaned.indices)
         return copy
-    }
-
-    static func shouldShowOptionText(_ value: String, hasMedia: Bool) -> Bool {
-        _ = hasMedia
-        return !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     static func cleanOptionLabels(_ values: [String]) -> [String] {
@@ -115,6 +125,14 @@ struct Question: Codable, Identifiable, Hashable {
         }
         guard Set(parsed.map(\.label)).count == parsed.count else { return values }
         return parsed.map(\.text)
+    }
+
+    static func shouldShowOptionText(_ value: String?, hasMedia: Bool) -> Bool {
+        guard let value else { return false }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        if !hasMedia { return true }
+        return trimmed != "图片" && trimmed != "见图"
     }
 
     var cleanedOptions: [String] { Self.cleanOptionLabels(options) }
@@ -155,15 +173,16 @@ struct AnswerFeedback: Codable, Hashable {
     let mostWrong: Int?
     let sourceDetail: String?
     let keypoints: [String]?
+    let explanationBlocks: [QuestionContentBlock]?
 
     enum CodingKeys: String, CodingKey {
-        case correct, answer, answers, explanation, media, favorite
+        case correct, answer, answers, explanation, media, favorite, keypoints
         case elapsedMS = "elapsed_ms"
         case correctRatio = "correct_ratio"
         case totalCount = "total_count"
         case mostWrong = "most_wrong"
         case sourceDetail = "source_detail"
-        case keypoints
+        case explanationBlocks = "explanation_blocks"
     }
 }
 

@@ -83,16 +83,25 @@ struct DailyChallengeView: View {
                 if let material = question.material, !material.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("材料").font(.caption.bold()).foregroundStyle(.tint)
-                        Text(material).tijingQuestionMaterial()
-                        QuestionMediaStrip(urls: question.media?.material ?? [])
+                        QuestionRichContent(
+                            text: material,
+                            urls: question.media?.material ?? [],
+                            blocks: question.materialBlocks ?? [],
+                            style: .material
+                        )
                     }
                     .padding(14)
                     .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
 
-                TijingQuestionStemBlock(text: question.stem, tint: TijingDesign.violet)
-                    .textSelection(.disabled)
-                QuestionMediaStrip(urls: question.media?.stem ?? [])
+                QuestionRichContent(
+                    text: question.stem,
+                    urls: question.media?.stem ?? [],
+                    blocks: question.stemBlocks ?? [],
+                    style: .stem,
+                    tint: TijingDesign.violet
+                )
+                .textSelection(.disabled)
 
                 VStack(spacing: 10) {
                     ForEach(question.options.indices, id: \.self) { optionIndex in
@@ -218,16 +227,15 @@ struct DailyChallengeView: View {
                     .background(isPicked ? Color.accentColor : Color.secondary.opacity(0.12), in: Circle())
                     .foregroundStyle(isPicked ? Color.white : Color.primary)
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(question.options[optionIndex])
-                        .font(.body)
-                        .fontWeight(.regular)
-                        .lineSpacing(3)
-                        .strikethrough(isExcluded)
-                        .foregroundStyle(isExcluded ? .secondary : .primary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    if let optionMedia = question.media?.options, optionIndex < optionMedia.count {
-                        QuestionMediaStrip(urls: optionMedia[optionIndex], layout: .compact)
-                    }
+                    QuestionRichContent(
+                        text: question.options[optionIndex],
+                        urls: (question.media?.options?.indices.contains(optionIndex) == true ? question.media?.options?[optionIndex] : []) ?? [],
+                        blocks: question.optionBlocks?.indices.contains(optionIndex) == true ? (question.optionBlocks?[optionIndex] ?? []) : [],
+                        style: .option
+                    )
+                    .strikethrough(isExcluded)
+                    .foregroundStyle(isExcluded ? .secondary : .primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
             .padding(14)
