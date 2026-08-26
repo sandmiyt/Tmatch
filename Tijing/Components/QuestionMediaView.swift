@@ -129,14 +129,28 @@ struct QuestionRichContent: View {
     var tint: Color = TijingDesign.indigo
 
     private var effectiveBlocks: [QuestionContentBlock] {
-        if !blocks.isEmpty { return blocks }
-        var result: [QuestionContentBlock] = []
-        if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        var result = blocks
+        if result.isEmpty, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             result.append(QuestionContentBlock(type: "text", text: text, url: nil, mediaType: nil))
         }
-        result.append(contentsOf: urls.enumerated().map { index, url in
-            QuestionContentBlock(type: "image", text: nil, url: url, mediaType: types.indices.contains(index) ? types[index] : nil)
+        // A few historical rows contain a valid ordered layout whose image list is
+        // incomplete. Never let that partial layout hide media still present in the
+        // flat compatibility fields returned by the server.
+        var represented = Set(result.compactMap { block -> String? in
+            guard block.type == "image" else { return nil }
+            let value = block.url?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return value.isEmpty ? nil : value
         })
+        for (index, rawURL) in urls.enumerated() {
+            let url = rawURL.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !url.isEmpty, represented.insert(url).inserted else { continue }
+            result.append(QuestionContentBlock(
+                type: "image",
+                text: nil,
+                url: url,
+                mediaType: types.indices.contains(index) ? types[index] : nil
+            ))
+        }
         return result
     }
 
@@ -158,8 +172,7 @@ struct QuestionRichContent: View {
             if block.type == "image", let url = block.url, !url.isEmpty {
                 let declaredType = (block.mediaType ?? "").lowercased()
                 let loweredURL = url.lowercased()
-                let isFormula = block.inline == true
-                    || declaredType == "formula"
+                let isFormula = declaredType == "formula"
                     || loweredURL.contains("/accessories/formulas")
                     || loweredURL.contains("/formulas?")
                 if isFormula {
@@ -287,10 +300,27 @@ private struct QuestionInlineRichText: View {
         QuestionInlineTextView(parts: parts, images: images, style: style)
             .frame(maxWidth: .infinity, alignment: .leading)
             .task(id: formulaValues) {
-                for value in formulaValues where images[value] == nil {
+                let pending = formulaValues.filter { images[$0] == nil }
+                // Load independent inline formulas concurrently in small batches. A
+                // slow CDN request can no longer prevent every later formula loading.
+                for start in stride(from: 0, to: pending.count, by: 6) {
                     guard !Task.isCancelled else { return }
-                    if let image = await loadQuestionMediaImage(value) {
-                        images[value] = image
+                    let batch = Array(pending[start..<min(start + 6, pending.count)])
+                    let loaded = await withTaskGroup(of: (String, Data?).self, returning: [(String, Data)].self) { group in
+                        for value in batch {
+                            group.addTask {
+                                (value, await QuestionMediaDataStore.shared.data(for: value))
+                            }
+                        }
+                        var result: [(String, Data)] = []
+                        for await (value, data) in group {
+                            if let data { result.append((value, data)) }
+                        }
+                        return result
+                    }
+                    guard !Task.isCancelled else { return }
+                    for (value, data) in loaded {
+                        if let image = UIImage(data: data) { images[value] = image }
                     }
                 }
             }
@@ -406,20 +436,38 @@ private struct QuestionInlineTextView: UIViewRepresentable {
     }
 }
 
-@MainActor
-private func loadQuestionMediaImage(_ value: String) async -> UIImage? {
-    if let image = decodedQuestionDataImage(value) { return image }
-    guard let url = APIClient.shared.assetURL(value) else { return nil }
-    do {
-        let (data, response) = try await URLSession.shared.data(from: url)
-        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) { return nil }
-        return UIImage(data: data)
-    } catch {
+private actor QuestionMediaDataStore {
+    static let shared = QuestionMediaDataStore()
+    private let cache = NSCache<NSURL, NSData>()
+
+    func data(for value: String) async -> Data? {
+        if let embedded = decodedQuestionData(value) { return embedded }
+        guard let url = await MainActor.run(body: { APIClient.shared.assetURL(value) }) else { return nil }
+        if let cached = cache.object(forKey: url as NSURL) { return Data(referencing: cached) }
+
+        var request = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 20)
+        request.setValue("image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8", forHTTPHeaderField: "Accept")
+        for attempt in 0..<2 {
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
+                if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+                    if attempt == 0, [408, 429, 500, 502, 503, 504].contains(http.statusCode) { continue }
+                    return nil
+                }
+                guard !data.isEmpty else { continue }
+                cache.setObject(data as NSData, forKey: url as NSURL)
+                return data
+            } catch is CancellationError {
+                return nil
+            } catch {
+                if attempt > 0 { return nil }
+            }
+        }
         return nil
     }
 }
 
-private func decodedQuestionDataImage(_ value: String) -> UIImage? {
+private func decodedQuestionData(_ value: String) -> Data? {
     guard value.lowercased().hasPrefix("data:image/"),
           let comma = value.firstIndex(of: ",") else { return nil }
     let header = String(value[..<comma]).lowercased()
@@ -430,7 +478,11 @@ private func decodedQuestionDataImage(_ value: String) -> UIImage? {
     } else {
         data = payload.removingPercentEncoding?.data(using: .utf8)
     }
-    guard let data else { return nil }
+    return data
+}
+
+private func decodedQuestionDataImage(_ value: String) -> UIImage? {
+    guard let data = decodedQuestionData(value) else { return nil }
     return UIImage(data: data)
 }
 
