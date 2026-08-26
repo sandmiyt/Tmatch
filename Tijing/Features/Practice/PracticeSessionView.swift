@@ -66,11 +66,10 @@ struct PracticeSessionView: View {
             QuestionCorrectionView(questionID: target.id)
                 .presentationDetents([.medium])
         }
-        .sheet(isPresented: $store.showBatchResult) {
+        .sheet(isPresented: $store.showBatchResult, onDismiss: closeCompletedBatch) {
             if let result = store.batchResult {
                 PracticeBatchResultView(result: result, questions: store.questions) {
-                    store.showBatchResult = false
-                    dismiss()
+                    closeCompletedBatch()
                 }
             }
         }
@@ -107,32 +106,32 @@ struct PracticeSessionView: View {
 
                 questionTools(question)
 
-                if let material = question.material, !material.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                if question.material?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false || !(question.media?.material ?? []).isEmpty {
                     TijingPaperCard(tint: TijingDesign.butter) {
                         VStack(alignment: .leading, spacing: 10) {
                             Label("材料", systemImage: "doc.text.fill")
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(TijingDesign.amber)
                             QuestionRichContent(
-                                text: material,
+                                text: question.material ?? "",
                                 urls: question.media?.material ?? [],
-                                blocks: question.materialBlocks ?? [],
+                                types: question.media?.types?.material ?? [],
+                                blocks: question.media?.layout?.material ?? [],
                                 style: .material
                             )
                         }
                     }
                 }
 
-                VStack(alignment: .leading, spacing: 12) {
-                    QuestionRichContent(
-                        text: question.stem,
-                        urls: question.media?.stem ?? [],
-                        blocks: question.stemBlocks ?? [],
-                        style: .stem,
-                        tint: TijingDesign.violet
-                    )
-                    .textSelection(.disabled)
-                }
+                QuestionRichContent(
+                    text: question.stem,
+                    urls: question.media?.stem ?? [],
+                    types: question.media?.types?.stem ?? [],
+                    blocks: question.media?.layout?.stem ?? [],
+                    style: .stem,
+                    tint: TijingDesign.violet
+                )
+                .textSelection(.disabled)
 
                 VStack(spacing: 12) {
                     ForEach(question.options.indices, id: \.self) { index in
@@ -140,7 +139,8 @@ struct PracticeSessionView: View {
                             letter: TijingFormat.optionLetter(index),
                             text: question.options[index],
                             media: optionMedia(question, index: index),
-                            blocks: question.optionBlocks?[index] ?? [],
+                            mediaTypes: question.media?.optionTypes(at: index) ?? [],
+                            mediaBlocks: question.media?.optionLayout(at: index) ?? [],
                             state: optionState(question, displayIndex: index),
                             excluded: store.excludedIndices(for: question).contains(index),
                             tap: { Task { await store.tapOption(index) } },
@@ -303,6 +303,12 @@ struct PracticeSessionView: View {
     private func optionMedia(_ question: Question, index: Int) -> [String] {
         guard let values = question.media?.options, values.indices.contains(index) else { return [] }
         return values[index]
+    }
+
+    private func closeCompletedBatch() {
+        guard store.batchResult != nil else { return }
+        store.resetCompletedBatch()
+        dismiss()
     }
 
     private func optionState(_ question: Question, displayIndex: Int) -> OptionVisualState {
@@ -478,7 +484,8 @@ private struct OptionRow: View {
     let letter: String
     let text: String
     let media: [String]
-    let blocks: [QuestionContentBlock]
+    let mediaTypes: [String]
+    let mediaBlocks: [QuestionContentBlock]
     let state: OptionVisualState
     let excluded: Bool
     let tap: () -> Void
@@ -492,15 +499,9 @@ private struct OptionRow: View {
                     .frame(width: 30, height: 30)
                     .background(circleBackground, in: Circle())
                     .foregroundStyle(circleForeground)
-                QuestionRichContent(
-                    text: text,
-                    urls: media,
-                    blocks: blocks,
-                    style: .option
-                )
-                .foregroundStyle(excluded ? .secondary : .primary)
-                .strikethrough(excluded)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                QuestionRichContent(text: text, urls: media, types: mediaTypes, blocks: mediaBlocks, style: .option)
+                    .foregroundStyle(excluded ? .secondary : .primary)
+                    .strikethrough(excluded)
             }
         }
         .padding(14)
@@ -555,12 +556,8 @@ private struct FeedbackCard: View {
 
             if let explanation = feedback.explanation, !explanation.isEmpty {
                 Text("解析").font(.headline)
-                QuestionRichContent(
-                    text: remapExplanation(explanation),
-                    urls: feedback.media?.explanation ?? [],
-                    blocks: feedback.explanationBlocks ?? [],
-                    style: .explanation
-                )
+                Text(remapExplanation(explanation)).font(.body).fontWeight(.regular).lineSpacing(5)
+                QuestionMediaStrip(urls: feedback.media?.explanation ?? [], types: feedback.media?.types?.explanation ?? [])
             }
 
             if let keypoints = feedback.keypoints, !keypoints.isEmpty {

@@ -87,6 +87,10 @@ final class PracticeSessionStore {
     var isLast: Bool { !questions.isEmpty && index == questions.count - 1 }
 
     func load() async {
+        // SwiftUI can retain a NavigationLink destination briefly after it is popped.
+        // If that destination completed a batch, discard its terminal in-memory state
+        // before loading again instead of reopening on the old last question.
+        if batchResult != nil { resetCompletedBatch() }
         guard questions.isEmpty, !isLoading else { return }
         isLoading = true; error = nil
         defer { isLoading = false }
@@ -351,6 +355,20 @@ final class PracticeSessionStore {
     }
 
     func clearResume() { PracticeResumeStore.clear(key: resumeKey) }
+
+    func resetCompletedBatch() {
+        PracticeResumeStore.clear(key: resumeKey)
+        questions = []
+        index = 0
+        picks = [:]
+        feedback = [:]
+        excluded = [:]
+        elapsedByQuestion = [:]
+        error = nil
+        batchResult = nil
+        showBatchResult = false
+        startedAt = Date()
+    }
 
     private func advanceAfterDeferredAnswer() async {
         guard let question = currentQuestion else { return }
