@@ -80,6 +80,14 @@ struct Question: Codable, Identifiable, Hashable {
     var keypoints: [String]?
     var favorite: Bool?
 
+    // Compatibility accessors for battle screens created before rich-media layout
+    // became a nested QuestionMediaData field. Keep the old call sites source-safe
+    // without duplicating or changing the underlying payload.
+    var stemBlocks: [QuestionContentBlock]? { media?.layout?.stem }
+    var materialBlocks: [QuestionContentBlock]? { media?.layout?.material }
+    var optionBlocks: [[QuestionContentBlock]]? { media?.layout?.options }
+    var explanationBlocks: [QuestionContentBlock]? { media?.layout?.explanation }
+
     enum CodingKeys: String, CodingKey {
         case id, stem, material, options, media, subject, topic, difficulty, source, answer, answers, explanation, year, region, exam, status, favorite
         case optionOrder = "option_order"
