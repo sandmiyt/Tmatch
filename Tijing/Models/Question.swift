@@ -1,33 +1,5 @@
 import Foundation
 
-struct QuestionContentBlock: Codable, Hashable {
-    var type: String
-    var text: String?
-    var src: String?
-    var inline: Bool?
-
-    var url: String? { src }
-    var mediaType: String? { inline == true ? "formula" : nil }
-
-    init(type: String, text: String? = nil, url: String? = nil, mediaType: String? = nil) {
-        self.type = type
-        self.text = text
-        self.src = url
-        self.inline = mediaType == "formula" ? true : nil
-    }
-
-    enum CodingKeys: String, CodingKey {
-        case type, text, src, inline
-    }
-}
-
-struct QuestionMediaLayoutData: Codable, Hashable {
-    var stem: [QuestionContentBlock]?
-    var material: [QuestionContentBlock]?
-    var options: [[QuestionContentBlock]]?
-    var explanation: [QuestionContentBlock]?
-}
-
 struct QuestionMediaData: Codable, Hashable {
     var stem: [String]?
     var material: [String]?
@@ -36,12 +8,49 @@ struct QuestionMediaData: Codable, Hashable {
     var count: Int?
     var cachedCount: Int?
     var externalCount: Int?
-    var layout: QuestionMediaLayoutData?
+    var types: QuestionMediaTypeData?
+    var layout: QuestionContentLayoutData?
 
     enum CodingKeys: String, CodingKey {
-        case stem, material, options, explanation, count, layout
+        case stem, material, options, explanation, count, types, layout
         case cachedCount = "cached_count"
         case externalCount = "external_count"
+    }
+
+    func optionTypes(at index: Int) -> [String] {
+        guard let values = types?.options, values.indices.contains(index) else { return [] }
+        return values[index]
+    }
+
+    func optionLayout(at index: Int) -> [QuestionContentBlock] {
+        guard let values = layout?.options, values.indices.contains(index) else { return [] }
+        return values[index]
+    }
+}
+
+struct QuestionMediaTypeData: Codable, Hashable {
+    var stem: [String]?
+    var material: [String]?
+    var options: [[String]]?
+    var explanation: [String]?
+}
+
+struct QuestionContentLayoutData: Codable, Hashable {
+    var stem: [QuestionContentBlock]?
+    var material: [QuestionContentBlock]?
+    var options: [[QuestionContentBlock]]?
+    var explanation: [QuestionContentBlock]?
+}
+
+struct QuestionContentBlock: Codable, Hashable {
+    let type: String
+    let text: String?
+    let url: String?
+    let mediaType: String?
+
+    enum CodingKeys: String, CodingKey {
+        case type, text, url
+        case mediaType = "media_type"
     }
 }
 
@@ -70,11 +79,6 @@ struct Question: Codable, Identifiable, Hashable {
     var sourceDetail: String?
     var keypoints: [String]?
     var favorite: Bool?
-
-    var stemBlocks: [QuestionContentBlock]? { media?.layout?.stem }
-    var materialBlocks: [QuestionContentBlock]? { media?.layout?.material }
-    var optionBlocks: [[QuestionContentBlock]]? { media?.layout?.options }
-    var explanationBlocks: [QuestionContentBlock]? { media?.layout?.explanation }
 
     enum CodingKeys: String, CodingKey {
         case id, stem, material, options, media, subject, topic, difficulty, source, answer, answers, explanation, year, region, exam, status, favorite
@@ -113,7 +117,36 @@ struct Question: Codable, Identifiable, Hashable {
         let cleaned = Self.cleanOptionLabels(options)
         var copy = self
         copy.options = cleaned
-        copy.optionOrder = Array(cleaned.indices)
+        guard !isJudgment, cleaned.count > 1 else {
+            copy.optionOrder = Array(cleaned.indices)
+            return copy
+        }
+
+        var order = Array(cleaned.indices)
+        for i in stride(from: order.count - 1, through: 1, by: -1) {
+            let j = Int.random(in: 0...i)
+            if i != j { order.swapAt(i, j) }
+        }
+        if order.enumerated().allSatisfy({ $0.offset == $0.element }), let first = order.first {
+            order.removeFirst()
+            order.append(first)
+        }
+
+        copy.optionOrder = order
+        copy.options = order.map { cleaned[$0] }
+        if let mediaOptions = media?.options {
+            var newMedia = media
+            newMedia?.options = order.map { index in index < mediaOptions.count ? mediaOptions[index] : [] }
+            if let typeOptions = media?.types?.options, var newTypes = newMedia?.types {
+                newTypes.options = order.map { index in index < typeOptions.count ? typeOptions[index] : [] }
+                newMedia?.types = newTypes
+            }
+            if let layoutOptions = media?.layout?.options, var newLayout = newMedia?.layout {
+                newLayout.options = order.map { index in index < layoutOptions.count ? layoutOptions[index] : [] }
+                newMedia?.layout = newLayout
+            }
+            copy.media = newMedia
+        }
         return copy
     }
 
@@ -141,12 +174,11 @@ struct Question: Codable, Identifiable, Hashable {
         return parsed.map(\.text)
     }
 
-    static func shouldShowOptionText(_ value: String?, hasMedia: Bool) -> Bool {
-        guard let value else { return false }
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return false }
-        if !hasMedia { return true }
-        return trimmed != "图片" && trimmed != "见图"
+    static func shouldShowOptionText(_ value: String, hasMedia: Bool) -> Bool {
+        guard hasMedia else { return true }
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: " ", with: "")
+        return !["图片选项", "图片", "图示选项", "选项图片"].contains(normalized)
     }
 
     var cleanedOptions: [String] { Self.cleanOptionLabels(options) }
@@ -187,15 +219,15 @@ struct AnswerFeedback: Codable, Hashable {
     let mostWrong: Int?
     let sourceDetail: String?
     let keypoints: [String]?
-    var explanationBlocks: [QuestionContentBlock]? { media?.layout?.explanation }
 
     enum CodingKeys: String, CodingKey {
-        case correct, answer, answers, explanation, media, favorite, keypoints
+        case correct, answer, answers, explanation, media, favorite
         case elapsedMS = "elapsed_ms"
         case correctRatio = "correct_ratio"
         case totalCount = "total_count"
         case mostWrong = "most_wrong"
         case sourceDetail = "source_detail"
+        case keypoints
     }
 }
 
