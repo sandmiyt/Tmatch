@@ -19,9 +19,7 @@ struct RootView: View {
             NavigationStack {
                 HomeView(showingAuth: $showingAuth)
             }
-            .tijingRootTabChrome(
-                isVisible: !tabBarHidden && !showingFirstLaunchIntro
-            )
+            .tijingRootTabChrome()
             .tabItem { Label("首页", systemImage: "house") }
             .tag(AppTab.home)
 
@@ -36,9 +34,7 @@ struct RootView: View {
                     showingAuth = true
                 }
             }
-            .tijingRootTabChrome(
-                isVisible: !tabBarHidden && !showingFirstLaunchIntro
-            )
+            .tijingRootTabChrome()
             .tabItem { Label("刷题", systemImage: "book.pages") }
             .tag(AppTab.practice)
 
@@ -53,27 +49,21 @@ struct RootView: View {
                     showingAuth = true
                 }
             }
-            .tijingRootTabChrome(
-                isVisible: !tabBarHidden && !showingFirstLaunchIntro
-            )
+            .tijingRootTabChrome()
             .tabItem { Label("对战", systemImage: "bolt.horizontal.circle") }
             .tag(AppTab.battle)
 
             NavigationStack {
                 RankingView()
             }
-            .tijingRootTabChrome(
-                isVisible: !tabBarHidden && !showingFirstLaunchIntro
-            )
+            .tijingRootTabChrome()
             .tabItem { Label("排行", systemImage: "trophy") }
             .tag(AppTab.ranking)
 
             NavigationStack {
                 ProfileView(showingAuth: $showingAuth)
             }
-            .tijingRootTabChrome(
-                isVisible: !tabBarHidden && !showingFirstLaunchIntro
-            )
+            .tijingRootTabChrome()
             .tabItem { Label("我的", systemImage: "person.crop.circle") }
             .badge(session.unreadNotifications)
             .tag(AppTab.profile)
@@ -89,24 +79,22 @@ struct RootView: View {
             .opacity(showingFirstLaunchIntro ? 0.94 : 1)
             .animation(.easeOut(duration: 0.34), value: showingFirstLaunchIntro)
 
-            if !tabBarHidden && !showingFirstLaunchIntro {
-                VStack(spacing: 0) {
-                    Spacer(minLength: 0)
-                    TijingCinevaGlassTabBar(
-                        selection: $selectedTab,
-                        unreadCount: session.unreadNotifications
-                    )
-                }
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-                .zIndex(50)
-            }
-
             if showingFirstLaunchIntro {
                 FirstLaunchIntroView {
                     finishFirstLaunchIntro()
                 }
                 .transition(.opacity)
                 .zIndex(100)
+            }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if !tabBarHidden && !showingFirstLaunchIntro {
+                TijingCinevaGlassTabBar(
+                    selection: $selectedTab,
+                    unreadCount: session.unreadNotifications
+                )
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .zIndex(50)
             }
         }
         .tint(.accentColor)
@@ -425,31 +413,15 @@ enum AppTab: Hashable, CaseIterable {
 }
 
 private struct TijingRootTabChromeModifier: ViewModifier {
-    let isVisible: Bool
-
     func body(content: Content) -> some View {
         content
             .toolbar(.hidden, for: .tabBar)
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                if isVisible {
-                    Color.clear
-                        .frame(height: TijingTabBarLayout.reservedHeight)
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-                }
-            }
     }
 }
 
 private extension View {
-    func tijingRootTabChrome(
-        isVisible: Bool
-    ) -> some View {
-        modifier(
-            TijingRootTabChromeModifier(
-                isVisible: isVisible
-            )
-        )
+    func tijingRootTabChrome() -> some View {
+        modifier(TijingRootTabChromeModifier())
     }
 }
 
