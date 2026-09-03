@@ -43,6 +43,7 @@ struct NotificationsView: View {
             }
         }
         .navigationTitle("通知中心")
+        .tijingTabBarPageClearance()
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 if !items.isEmpty {

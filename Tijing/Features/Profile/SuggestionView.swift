@@ -68,6 +68,7 @@ struct SuggestionView: View {
         }
         .navigationTitle("功能建议")
         .navigationBarTitleDisplayMode(.inline)
+        .tijingTabBarPageClearance()
     }
 
     @MainActor

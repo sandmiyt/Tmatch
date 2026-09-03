@@ -19,7 +19,9 @@ struct RootView: View {
             NavigationStack {
                 HomeView(showingAuth: $showingAuth)
             }
-            .tijingRootTabChrome()
+            .tijingRootTabChrome(
+                isVisible: !tabBarHidden && !showingFirstLaunchIntro
+            )
             .tabItem { Label("首页", systemImage: "house") }
             .tag(AppTab.home)
 
@@ -34,7 +36,9 @@ struct RootView: View {
                     showingAuth = true
                 }
             }
-            .tijingRootTabChrome()
+            .tijingRootTabChrome(
+                isVisible: !tabBarHidden && !showingFirstLaunchIntro
+            )
             .tabItem { Label("刷题", systemImage: "book.pages") }
             .tag(AppTab.practice)
 
@@ -49,21 +53,27 @@ struct RootView: View {
                     showingAuth = true
                 }
             }
-            .tijingRootTabChrome()
+            .tijingRootTabChrome(
+                isVisible: !tabBarHidden && !showingFirstLaunchIntro
+            )
             .tabItem { Label("对战", systemImage: "bolt.horizontal.circle") }
             .tag(AppTab.battle)
 
             NavigationStack {
                 RankingView()
             }
-            .tijingRootTabChrome()
+            .tijingRootTabChrome(
+                isVisible: !tabBarHidden && !showingFirstLaunchIntro
+            )
             .tabItem { Label("排行", systemImage: "trophy") }
             .tag(AppTab.ranking)
 
             NavigationStack {
                 ProfileView(showingAuth: $showingAuth)
             }
-            .tijingRootTabChrome()
+            .tijingRootTabChrome(
+                isVisible: !tabBarHidden && !showingFirstLaunchIntro
+            )
             .tabItem { Label("我的", systemImage: "person.crop.circle") }
             .badge(session.unreadNotifications)
             .tag(AppTab.profile)
@@ -79,22 +89,24 @@ struct RootView: View {
             .opacity(showingFirstLaunchIntro ? 0.94 : 1)
             .animation(.easeOut(duration: 0.34), value: showingFirstLaunchIntro)
 
+            if !tabBarHidden && !showingFirstLaunchIntro {
+                VStack(spacing: 0) {
+                    Spacer(minLength: 0)
+                    TijingCinevaGlassTabBar(
+                        selection: $selectedTab,
+                        unreadCount: session.unreadNotifications
+                    )
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .zIndex(50)
+            }
+
             if showingFirstLaunchIntro {
                 FirstLaunchIntroView {
                     finishFirstLaunchIntro()
                 }
                 .transition(.opacity)
                 .zIndex(100)
-            }
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if !tabBarHidden && !showingFirstLaunchIntro {
-                TijingCinevaGlassTabBar(
-                    selection: $selectedTab,
-                    unreadCount: session.unreadNotifications
-                )
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-                .zIndex(50)
             }
         }
         .tint(.accentColor)
@@ -413,15 +425,27 @@ enum AppTab: Hashable, CaseIterable {
 }
 
 private struct TijingRootTabChromeModifier: ViewModifier {
+    let isVisible: Bool
+
     func body(content: Content) -> some View {
         content
             .toolbar(.hidden, for: .tabBar)
+            .environment(
+                \.tijingTabBarContentClearance,
+                isVisible ? TijingTabBarLayout.reservedHeight : 0
+            )
     }
 }
 
 private extension View {
-    func tijingRootTabChrome() -> some View {
-        modifier(TijingRootTabChromeModifier())
+    func tijingRootTabChrome(
+        isVisible: Bool
+    ) -> some View {
+        modifier(
+            TijingRootTabChromeModifier(
+                isVisible: isVisible
+            )
+        )
     }
 }
 
@@ -448,6 +472,19 @@ struct TijingTabBarContentFooter: View {
             .frame(height: clearance)
             .allowsHitTesting(false)
             .accessibilityHidden(true)
+    }
+}
+
+private struct TijingTabBarPageClearanceModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .padding(.bottom, TijingTabBarLayout.reservedHeight)
+    }
+}
+
+extension View {
+    func tijingTabBarPageClearance() -> some View {
+        modifier(TijingTabBarPageClearanceModifier())
     }
 }
 

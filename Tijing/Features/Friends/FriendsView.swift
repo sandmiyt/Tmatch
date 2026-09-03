@@ -115,6 +115,7 @@ struct FriendsView: View {
         .animation(.spring(response: 0.40, dampingFraction: 0.86), value: friends.map(\.id))
         .animation(.spring(response: 0.40, dampingFraction: 0.86), value: incoming.map(\.id))
         .navigationTitle("好友")
+        .tijingTabBarPageClearance()
         .searchable(text: $searchText, prompt: "搜索昵称")
         .task {
             await load()

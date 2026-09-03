@@ -77,6 +77,7 @@ private struct PolicyArticleView: View {
         }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
+        .tijingTabBarPageClearance()
     }
 
     private func sectionTint(_ index: Int) -> Color {

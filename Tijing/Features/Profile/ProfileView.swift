@@ -322,6 +322,7 @@ struct EditProfileView: View {
         }
         .navigationTitle("编辑资料")
         .navigationBarTitleDisplayMode(.inline)
+        .tijingTabBarPageClearance()
         .sensoryFeedback(.selection, trigger: gender)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {

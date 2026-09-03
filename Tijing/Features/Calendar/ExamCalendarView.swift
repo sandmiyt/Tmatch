@@ -49,6 +49,7 @@ struct ExamCalendarView: View {
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
+        .tijingTabBarPageClearance()
         .task(id: session.isAuthenticated) { await load() }
         .task(id: followedItems.map(\.id)) { await runFollowedCarousel() }
         .refreshable { await load() }

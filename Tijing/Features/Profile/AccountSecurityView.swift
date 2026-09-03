@@ -38,6 +38,7 @@ struct AccountSecurityView: View {
         }
         .navigationTitle("账号与安全")
         .navigationBarTitleDisplayMode(.inline)
+        .tijingTabBarPageClearance()
         .task { await load() }
     }
 

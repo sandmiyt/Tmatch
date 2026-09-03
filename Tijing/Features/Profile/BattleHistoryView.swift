@@ -59,6 +59,7 @@ struct BattleHistoryView: View {
             }
         }
         .navigationTitle("排位战绩")
+        .tijingTabBarPageClearance()
         .refreshable { await load() }
         .task { await load() }
     }
@@ -146,6 +147,7 @@ private struct BattleHistoryDetailView: View {
         }
         .navigationTitle("对局详情")
         .navigationBarTitleDisplayMode(.inline)
+        .tijingTabBarPageClearance()
         .task { await load() }
         .refreshable { await load() }
         .sheet(item: $correctionTarget) { target in

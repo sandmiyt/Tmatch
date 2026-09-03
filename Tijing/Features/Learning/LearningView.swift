@@ -57,6 +57,7 @@ struct LearningView: View {
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
+        .tijingTabBarPageClearance()
         .task { await load() }
     }
 
