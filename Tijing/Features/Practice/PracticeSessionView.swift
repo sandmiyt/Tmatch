@@ -556,7 +556,7 @@ private struct FeedbackCard: View {
 
             if let explanation = feedback.explanation, !explanation.isEmpty {
                 Text("解析").font(.headline)
-                Text(remapExplanation(explanation)).font(.body).fontWeight(.regular).lineSpacing(5)
+                Text(question.explanationForDisplay(explanation)).font(.body).fontWeight(.regular).lineSpacing(5)
                 QuestionMediaStrip(urls: feedback.media?.explanation ?? [], types: feedback.media?.types?.explanation ?? [])
             }
 
@@ -603,25 +603,6 @@ private struct FeedbackCard: View {
         values.sorted().map { index in TijingFormat.optionLetter(index) }.joined(separator: "、")
     }
 
-    private func remapExplanation(_ text: String) -> String {
-        guard let order = question.optionOrder, order.count == question.options.count else { return text }
-        var inverse: [Int: Int] = [:]
-        for (display, original) in order.enumerated() { inverse[original] = display }
-        let pattern = #"(?<![A-Za-z])([A-E])(?![A-Za-z])"#
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return text }
-        let ns = text as NSString
-        let matches = regex.matches(in: text, range: NSRange(location: 0, length: ns.length)).reversed()
-        var result = text
-        for match in matches {
-            guard match.numberOfRanges > 1 else { continue }
-            let range = match.range(at: 1)
-            let letter = ns.substring(with: range)
-            guard let scalar = letter.unicodeScalars.first, let display = inverse[Int(scalar.value) - 65] else { continue }
-            let replacement = TijingFormat.optionLetter(display)
-            if let swiftRange = Range(range, in: result) { result.replaceSubrange(swiftRange, with: replacement) }
-        }
-        return result
-    }
 }
 
 private struct PracticeBatchResultView: View {
@@ -686,7 +667,7 @@ private struct PracticeBatchResultView: View {
                                                     .tijingQuestionStem(compact: true)
                                                     .lineLimit(3)
                                                 if !item.correct, let explanation = item.explanation, !explanation.isEmpty {
-                                                    Text(explanation)
+                                                    Text(question(item.questionID)?.explanationForDisplay(explanation) ?? explanation)
                                                         .font(.caption)
                                                         .foregroundStyle(.secondary)
                                                         .lineLimit(4)

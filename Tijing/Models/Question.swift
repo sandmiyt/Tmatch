@@ -200,6 +200,51 @@ struct Question: Codable, Identifiable, Hashable {
         let order = optionOrder ?? Array(options.indices)
         return original.compactMap { value in order.firstIndex(of: value) }.sorted()
     }
+
+    func explanationForDisplay(_ text: String) -> String {
+        let order = optionOrder ?? Array(options.indices)
+        guard order.count == options.count else { return text }
+        return QuestionExplanationFormatter.remap(text, order: order)
+    }
+}
+
+/// Uses the same display-to-original permutation as answer submission. Keep this
+/// shared by inline feedback and batch results; never infer answers from prose.
+enum QuestionExplanationFormatter {
+    private static let referencePattern = #"(?<![A-Za-z0-9_Ａ-Ｚａ-ｚ０-９])([A-EＡ-Ｅ]{1,5})(?![A-Za-z0-9_Ａ-Ｚａ-ｚ０-９])"#
+    private static let groupSuffixPattern = #"^\s*(?:[一二三四五两0-9]+)?(?:个)?(?:选项|项|正确|错误|均|都|符合|不符合|不正确|当选|入选|排除|适宜|适用)"#
+    private static let groupPrefixPattern = #"(?:答案|应选|选择|选|排除)\s*(?:应为|应是|为|是|[:：])?\s*[（(【]?\s*$"#
+
+    static func remap(_ text: String, order: [Int]) -> String {
+        guard !text.isEmpty, !order.isEmpty, order.sorted() == Array(order.indices),
+              let regex = try? NSRegularExpression(pattern: referencePattern) else { return text }
+        var inverse: [Int: Int] = [:]
+        for (display, original) in order.enumerated() { inverse[original] = display }
+        let source = text as NSString
+        let result = NSMutableString(string: text)
+        let matches = regex.matches(in: text, range: NSRange(location: 0, length: source.length))
+        for match in matches.reversed() {
+            let range = match.range(at: 1)
+            let token = source.substring(with: range)
+            if token.count > 1 {
+                let beforeStart = max(0, range.location - 24)
+                let before = source.substring(with: NSRange(location: beforeStart, length: range.location - beforeStart))
+                let afterStart = NSMaxRange(range)
+                let after = source.substring(with: NSRange(location: afterStart, length: min(24, source.length - afterStart)))
+                guard before.range(of: groupPrefixPattern, options: .regularExpression) != nil
+                        || after.range(of: groupSuffixPattern, options: .regularExpression) != nil else { continue }
+            }
+            let replacement = token.unicodeScalars.map { scalar -> String in
+                let base = scalar.value >= 0xFF21 ? 0xFF21 : 65
+                let original = Int(scalar.value) - base
+                let display = inverse[original] ?? original
+                guard let mapped = UnicodeScalar(base + display) else { return String(scalar) }
+                return String(mapped)
+            }.joined()
+            result.replaceCharacters(in: range, with: replacement)
+        }
+        return result as String
+    }
 }
 
 struct PracticeSetResponse: Decodable {

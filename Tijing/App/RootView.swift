@@ -430,10 +430,14 @@ private struct TijingRootTabChromeModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .toolbar(.hidden, for: .tabBar)
-            .environment(
-                \.tijingTabBarContentClearance,
-                isVisible ? TijingTabBarLayout.reservedHeight : 0
-            )
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if isVisible {
+                    Color.clear
+                        .frame(height: TijingTabBarLayout.reservedHeight)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+            }
     }
 }
 
