@@ -60,6 +60,8 @@ struct SuggestionView: View {
                     }
                     .buttonStyle(TijingPrimaryButtonStyle())
                     .disabled(busy || content.trimmingCharacters(in: .whitespacesAndNewlines).count < 5)
+
+                    TijingTabBarContentFooter()
                 }
                 .padding(.horizontal, TijingDesign.pageHorizontalPadding)
                 .padding(.top, 10)
@@ -68,7 +70,6 @@ struct SuggestionView: View {
         }
         .navigationTitle("功能建议")
         .navigationBarTitleDisplayMode(.inline)
-        .tijingTabBarPageClearance()
     }
 
     @MainActor

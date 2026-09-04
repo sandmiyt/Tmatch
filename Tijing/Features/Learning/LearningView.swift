@@ -38,6 +38,8 @@ struct LearningView: View {
                                 .foregroundStyle(.secondary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
+
+                        TijingTabBarContentFooter()
                     }
                     .padding(.horizontal, TijingDesign.pageHorizontalPadding)
                     .padding(.top, 8)
@@ -57,7 +59,6 @@ struct LearningView: View {
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
-        .tijingTabBarPageClearance()
         .task { await load() }
     }
 

@@ -52,6 +52,8 @@ struct BattleHistoryView: View {
                     .listRowBackground(Color.clear)
                     .tijingReveal(order: min(index, 8))
                 }
+
+                    TijingTabBarListFooter()
                 }
                 .scrollContentBackground(.hidden)
                 .background(TijingPageBackground())
@@ -59,7 +61,6 @@ struct BattleHistoryView: View {
             }
         }
         .navigationTitle("排位战绩")
-        .tijingTabBarPageClearance()
         .refreshable { await load() }
         .task { await load() }
     }
@@ -140,6 +141,8 @@ private struct BattleHistoryDetailView: View {
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .center)
                     }
+
+                    TijingTabBarContentFooter()
                 }
                 .padding()
                 .padding(.bottom, 18)
@@ -147,7 +150,6 @@ private struct BattleHistoryDetailView: View {
         }
         .navigationTitle("对局详情")
         .navigationBarTitleDisplayMode(.inline)
-        .tijingTabBarPageClearance()
         .task { await load() }
         .refreshable { await load() }
         .sheet(item: $correctionTarget) { target in

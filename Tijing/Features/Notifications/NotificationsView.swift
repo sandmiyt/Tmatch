@@ -35,6 +35,8 @@ struct NotificationsView: View {
                                         .tint(.red)
                                 }
                         }
+
+                        TijingTabBarListFooter()
                     }
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
@@ -43,7 +45,6 @@ struct NotificationsView: View {
             }
         }
         .navigationTitle("通知中心")
-        .tijingTabBarPageClearance()
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 if !items.isEmpty {

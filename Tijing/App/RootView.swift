@@ -475,16 +475,12 @@ struct TijingTabBarContentFooter: View {
     }
 }
 
-private struct TijingTabBarPageClearanceModifier: ViewModifier {
-    func body(content: Content) -> some View {
-        content
-            .padding(.bottom, TijingTabBarLayout.reservedHeight)
-    }
-}
-
-extension View {
-    func tijingTabBarPageClearance() -> some View {
-        modifier(TijingTabBarPageClearanceModifier())
+struct TijingTabBarListFooter: View {
+    var body: some View {
+        TijingTabBarContentFooter()
+            .listRowInsets(EdgeInsets())
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
     }
 }
 

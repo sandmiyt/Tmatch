@@ -109,13 +109,14 @@ struct FriendsView: View {
 
             if let message { Section { Text(message).font(.footnote).foregroundStyle(.secondary) } }
             if let error { Section { Text(error).font(.footnote).foregroundStyle(.red) } }
+
+            TijingTabBarListFooter()
         }
         .scrollContentBackground(.hidden)
         .background(TijingPageBackground())
         .animation(.spring(response: 0.40, dampingFraction: 0.86), value: friends.map(\.id))
         .animation(.spring(response: 0.40, dampingFraction: 0.86), value: incoming.map(\.id))
         .navigationTitle("好友")
-        .tijingTabBarPageClearance()
         .searchable(text: $searchText, prompt: "搜索昵称")
         .task {
             await load()

@@ -30,6 +30,7 @@ struct AccountSecurityView: View {
                     emailSection
                     if info?.hasEmail == true { unbindSection }
                     if let message { messageCard(message) }
+                    TijingTabBarContentFooter()
                 }
                 .padding(.horizontal, TijingDesign.pageHorizontalPadding)
                 .padding(.top, 10)
@@ -38,7 +39,6 @@ struct AccountSecurityView: View {
         }
         .navigationTitle("账号与安全")
         .navigationBarTitleDisplayMode(.inline)
-        .tijingTabBarPageClearance()
         .task { await load() }
     }
 

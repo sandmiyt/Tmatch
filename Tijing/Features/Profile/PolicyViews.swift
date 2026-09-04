@@ -68,6 +68,8 @@ private struct PolicyArticleView: View {
                             }
                         }
                     }
+
+                    TijingTabBarContentFooter()
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, TijingDesign.pageHorizontalPadding)
@@ -77,7 +79,6 @@ private struct PolicyArticleView: View {
         }
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
-        .tijingTabBarPageClearance()
     }
 
     private func sectionTint(_ index: Int) -> Color {

@@ -314,6 +314,8 @@ struct EditProfileView: View {
                             .foregroundStyle(.red)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
+
+                    TijingTabBarContentFooter()
                 }
                 .padding(.horizontal, TijingDesign.pageHorizontalPadding)
                 .padding(.top, 10)
@@ -322,7 +324,6 @@ struct EditProfileView: View {
         }
         .navigationTitle("编辑资料")
         .navigationBarTitleDisplayMode(.inline)
-        .tijingTabBarPageClearance()
         .sensoryFeedback(.selection, trigger: gender)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
