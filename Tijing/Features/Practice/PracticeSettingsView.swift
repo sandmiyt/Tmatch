@@ -1,13 +1,14 @@
 import SwiftUI
 
 struct PracticeSettingsView: View {
-    @Environment(\.dismiss) private var dismiss
-    @Binding var settings: PracticeSettings
     let onSave: @MainActor (PracticeSettings) async -> Void
+    @State private var initialSettings: PracticeSettings
+    private let retryPendingSave: Bool
     @State private var draft: PracticeSettings
 
-    init(settings: Binding<PracticeSettings>, onSave: @escaping @MainActor (PracticeSettings) async -> Void) {
-        _settings = settings
+    init(settings: Binding<PracticeSettings>, retryPendingSave: Bool = false, onSave: @escaping @MainActor (PracticeSettings) async -> Void) {
+        _initialSettings = State(initialValue: settings.wrappedValue)
+        self.retryPendingSave = retryPendingSave
         self.onSave = onSave
         _draft = State(initialValue: settings.wrappedValue)
     }
@@ -33,19 +34,13 @@ struct PracticeSettingsView: View {
         .sensoryFeedback(.selection, trigger: draft.difficultyMinRatio / 5)
         .sensoryFeedback(.selection, trigger: draft.difficultyMaxRatio / 5)
         .sensoryFeedback(.selection, trigger: draft.answerMode)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("取消") { dismiss() }
-            }
-            ToolbarItem(placement: .confirmationAction) {
-                Button("完成") {
-                    Task {
-                        await onSave(draft)
-                        dismiss()
-                    }
-                }
-                .bold()
-            }
+        .onDisappear {
+            var value = draft
+            value.normalize()
+            var original = initialSettings
+            original.normalize()
+            guard value != original || retryPendingSave else { return }
+            Task { await onSave(value) }
         }
     }
 

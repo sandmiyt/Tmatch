@@ -7,6 +7,9 @@ struct PracticeHubView: View {
     @State private var loading = false
     @State private var error: String?
     @State private var settingsOpen = false
+    @State private var settingsSaving = false
+    @State private var settingsNeedsSync = false
+    @State private var settingsRevision = 0
 
     var body: some View {
         ZStack {
@@ -52,13 +55,18 @@ struct PracticeHubView: View {
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $settingsOpen) {
+            let owner = session.user?.id
+            let token = session.token
             NavigationStack {
-                PracticeSettingsView(settings: $settings, onSave: saveSettings)
+                PracticeSettingsView(settings: $settings, retryPendingSave: settingsNeedsSync) { value in
+                    await saveSettings(value, owner: owner, token: token)
+                }
             }
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
         }
         .task { await loadAll() }
+        .onChange(of: session.user?.id) { _, _ in settingsOpen = false; settingsNeedsSync = false }
     }
 
     private var header: some View {
@@ -86,6 +94,7 @@ struct PracticeHubView: View {
             }
             .buttonStyle(TijingPressableCardStyle())
             .accessibilityLabel("练习设置")
+            .disabled(settingsSaving)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -252,26 +261,34 @@ struct PracticeHubView: View {
 
     @MainActor private func loadSettings() async {
         guard let token = session.token else { return }
+        let owner = session.user?.id
+        let revision = settingsRevision
         let cacheKey = session.userCacheKey("practice.settings")
         if let cached: PracticeSettings = session.api.cachedResponse(for: cacheKey) {
             var value = cached
             value.normalize()
             settings = value
         }
-        if let saved: PracticeSettings = try? await session.api.requestCached(
-            "/api/practice/settings", token: token, cacheKey: cacheKey
+        if let saved: PracticeSettings = try? await session.api.request(
+            "/api/practice/settings", token: token
         ) {
+            guard session.token == token, session.user?.id == owner, settingsRevision == revision else { return }
             var value = saved
             value.normalize()
             settings = value
+            session.api.storeCachedResponse(value, for: cacheKey)
         }
     }
 
-    @MainActor private func saveSettings(_ newValue: PracticeSettings) async {
-        guard let token = session.token else { return }
+    @MainActor private func saveSettings(_ newValue: PracticeSettings, owner: Int?, token: String?) async {
+        guard !settingsSaving, let owner, let token, session.user?.id == owner, session.token == token else { return }
+        settingsSaving = true
+        settingsRevision += 1
+        defer { settingsSaving = false }
         var normalized = newValue
         normalized.normalize()
         settings = normalized
+        settingsNeedsSync = true
         do {
             let response: PracticeSettings = try await session.api.request(
                 "/api/practice/settings",
@@ -279,13 +296,17 @@ struct PracticeHubView: View {
                 body: normalized,
                 token: token
             )
+            guard session.user?.id == owner, session.token == token else { return }
             var value = response
             value.normalize()
             settings = value
-            session.api.storeCachedResponse(value, for: session.userCacheKey("practice.settings"))
+            session.api.storeCachedResponse(value, for: "user.\(owner).practice.settings")
+            settingsNeedsSync = false
+            error = nil
             Haptics.success()
         } catch {
-            self.error = error.localizedDescription
+            guard session.user?.id == owner, session.token == token else { return }
+            self.error = "设置已在本次会话生效，但同步失败。重新打开设置并下滑关闭可重试：\(error.localizedDescription)"
             Haptics.error()
         }
     }
