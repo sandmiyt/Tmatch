@@ -71,8 +71,11 @@ struct BattleState: Codable, Hashable {
     /// Compatible with existing servers: reject regressions in monotonic battle progress.
     /// Same-question feedback/presence updates must still be accepted.
     func canReplace(_ old: BattleState) -> Bool {
-        guard roomID == old.roomID, !old.finished || finished,
-              questionIndex >= old.questionIndex, sharedQuestionIndex >= old.sharedQuestionIndex else { return false }
+        guard roomID == old.roomID else { return false }
+        // Existing backend resets question_index to zero when a battle ends.
+        if finished { return true }
+        guard !old.finished, questionIndex >= old.questionIndex,
+              sharedQuestionIndex >= old.sharedQuestionIndex else { return false }
         if questionIndex == old.questionIndex, old.myFeedback != nil, myFeedback == nil { return false }
         for player in players {
             if let previous = old.players.first(where: { $0.id == player.id }),

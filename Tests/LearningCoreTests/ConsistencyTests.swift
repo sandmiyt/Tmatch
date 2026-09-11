@@ -51,6 +51,7 @@ final class ConsistencyTests: XCTestCase {
         XCTAssertFalse(try state().canReplace(state(feedback: true)))
         XCTAssertFalse(try state().canReplace(state(finished: true)))
         XCTAssertTrue(try state(finished: true).canReplace(state()))
+        XCTAssertTrue(try state(question: 0, finished: true).canReplace(state(question: 9, feedback: true)))
     }
     func testSameQuestionUpdatesAndNextQuestionRemainAllowed() throws {
         XCTAssertTrue(try state(feedback: true).canReplace(state()))

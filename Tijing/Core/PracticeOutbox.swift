@@ -61,8 +61,8 @@ final class PracticeOutbox {
             try resource.setResourceValues(values)
             // Do not silently replace a damaged queue with an empty one.
             entries = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
-                .filter { $0.pathExtension == "json" }.compactMap {
-                    let receipt = try JSONDecoder().decode(PracticeReceipt.self, from: Data(contentsOf: $0))
+                .filter { $0.pathExtension == "json" }.compactMap { url -> PracticeReceipt? in
+                    let receipt = try JSONDecoder().decode(PracticeReceipt.self, from: Data(contentsOf: url))
                     guard receipt.owner == userID else { throw failure("补交记录账号校验失败") }
                     if receipt.response != nil, archive(receipt, in: folder) { return nil }
                     return receipt
