@@ -105,6 +105,19 @@ final class APIClient: @unchecked Sendable {
         headers: [String: String],
         responseCacheKey: String?
     ) async throws -> Response {
+        let data = try await requestData(path, method: method, bodyData: bodyData, token: token, query: query, headers: headers)
+        do {
+            let decoded = try JSONDecoder().decode(Response.self, from: data)
+            if let responseCacheKey { Self.storeCachedResponseData(data, for: responseCacheKey) }
+            return decoded
+        } catch {
+            throw APIError(message: "服务器数据格式与当前客户端不兼容", statusCode: 200, retryAfter: nil)
+        }
+    }
+
+    // The outbox persists these exact response bytes before acknowledging a submission.
+    func requestData(_ path: String, method: HTTPMethod = .post, bodyData: Data? = nil,
+                     token: String?, query: [URLQueryItem] = [], headers: [String: String] = [:]) async throws -> Data {
         let attempts = method == .get ? 2 : 1
         var lastError: Error?
         for attempt in 0..<attempts {
@@ -123,7 +136,7 @@ final class APIClient: @unchecked Sendable {
                     if http.statusCode == 401,
                        let token, !token.isEmpty,
                        http.value(forHTTPHeaderField: "X-Tijing-Auth-Invalid") == "1" {
-                        NotificationCenter.default.post(name: .tijingAuthInvalid, object: nil)
+                        NotificationCenter.default.post(name: .tijingAuthInvalid, object: token)
                     }
                     var message = Self.errorMessage(from: data) ?? "请求失败（\(http.statusCode)）"
                     if http.statusCode == 429, let retryAfter, retryAfter > 0 {
@@ -131,14 +144,9 @@ final class APIClient: @unchecked Sendable {
                     }
                     throw APIError(message: message, statusCode: http.statusCode, retryAfter: retryAfter)
                 }
-                do {
-                    let decoded = try JSONDecoder().decode(Response.self, from: data)
-                    if let responseCacheKey { Self.storeCachedResponseData(data, for: responseCacheKey) }
-                    return decoded
-                } catch {
-                    throw APIError(message: "服务器数据格式与当前客户端不兼容", statusCode: http.statusCode, retryAfter: nil)
-                }
+                return data
             } catch {
+                if Task.isCancelled { throw CancellationError() }
                 lastError = error
                 if let apiError = error as? APIError, apiError.statusCode == 401 || apiError.statusCode == 429 { break }
                 if attempt + 1 < attempts {
@@ -167,7 +175,7 @@ final class APIClient: @unchecked Sendable {
         guard (200..<300).contains(http.statusCode) else {
             let retryAfter = http.value(forHTTPHeaderField: "Retry-After").flatMap(Int.init)
             if http.statusCode == 401, http.value(forHTTPHeaderField: "X-Tijing-Auth-Invalid") == "1" {
-                NotificationCenter.default.post(name: .tijingAuthInvalid, object: nil)
+                NotificationCenter.default.post(name: .tijingAuthInvalid, object: token)
             }
             var message = Self.errorMessage(from: data) ?? "头像上传失败"
             if http.statusCode == 429, let retryAfter, retryAfter > 0 {

@@ -6,11 +6,15 @@ on:
       - 'Tijing/**'
       - 'Tijing.xcodeproj/**'
       - '.github/workflows/ios-build.yml'
+      - 'Package.swift'
+      - 'Tests/**'
   pull_request:
     paths:
       - 'Tijing/**'
       - 'Tijing.xcodeproj/**'
       - '.github/workflows/ios-build.yml'
+      - 'Package.swift'
+      - 'Tests/**'
   workflow_dispatch:
 
 jobs:
@@ -24,6 +28,11 @@ jobs:
 
       - name: Show Xcode version
         run: xcodebuild -version
+
+      - name: Test learning core and shared API fixtures
+        run: |
+          set -o pipefail
+          swift test 2>&1 | tee swift-test.log
 
       - name: Build Release for iPhone device SDK
         run: |
@@ -42,6 +51,18 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             build 2>&1 | tee xcodebuild-device.log
+
+      - name: Build Debug for Simulator
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project Tijing.xcodeproj \
+            -scheme Tijing \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            build 2>&1 | tee xcodebuild-simulator.log
 
       - name: Package unsigned IPA
         run: |
@@ -89,18 +110,6 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Build Debug for Simulator
-        run: |
-          set -o pipefail
-          xcodebuild \
-            -project Tijing.xcodeproj \
-            -scheme Tijing \
-            -configuration Debug \
-            -sdk iphonesimulator \
-            -destination 'generic/platform=iOS Simulator' \
-            CODE_SIGNING_ALLOWED=NO \
-            build 2>&1 | tee xcodebuild-simulator.log
-
       - name: Surface real compiler errors first
         if: failure()
         run: |
@@ -126,5 +135,6 @@ jobs:
           path: |
             xcodebuild-device.log
             xcodebuild-simulator.log
+            swift-test.log
           if-no-files-found: ignore
           retention-days: 7

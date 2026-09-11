@@ -1,0 +1,65 @@
+{
+  "question_id": 1,
+  "stem": "单选测试",
+  "material": "",
+  "options": [
+    "甲",
+    "乙"
+  ],
+  "media": {
+    "stem": [],
+    "material": [],
+    "options": [],
+    "explanation": [],
+    "count": 0,
+    "cached_count": 0,
+    "external_count": 0,
+    "section_repaired_count": 0,
+    "legacy_layout_repaired_count": 0,
+    "layout": {
+      "stem": [
+        {
+          "type": "text",
+          "text": "单选测试"
+        }
+      ],
+      "material": [],
+      "options": [
+        [
+          {
+            "type": "text",
+            "text": "甲"
+          }
+        ],
+        [
+          {
+            "type": "text",
+            "text": "乙"
+          }
+        ]
+      ],
+      "explanation": []
+    }
+  },
+  "question_type": "single",
+  "subject": "测试",
+  "topic": "单选",
+  "picked": [
+    1
+  ],
+  "correct": true,
+  "answer": 1,
+  "answers": [
+    1
+  ],
+  "explanation": "",
+  "favorite": false,
+  "elapsed_ms": 500,
+  "correct_ratio": null,
+  "total_count": null,
+  "most_wrong": null,
+  "source_detail": "自建题库",
+  "keypoints": [
+    "单选"
+  ]
+}

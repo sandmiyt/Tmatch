@@ -13,6 +13,7 @@ struct PracticeResumeSnapshot: Codable {
     let feedback: [String: AnswerFeedback]
     let excluded: [String: [Int]]
     let elapsed: [String: Int]
+    var attemptID: String? = nil
 }
 
 extension PracticeMode: Codable {}
@@ -66,6 +67,16 @@ final class PracticeSessionStore {
     private let token: String
     private let userID: Int
     private var startedAt = Date()
+    private var clockStart: TimeInterval? = ProcessInfo.processInfo.systemUptime
+    private var attemptID = UUID().uuidString
+    private var favoriteInFlight = Set<Int>()
+    private let outbox = PracticeOutbox.shared
+    private var batchID: String { attemptID + "-batch" }
+    private var finishID: String { attemptID + "-finish" }
+    private func answerID(_ questionID: Int) -> String { attemptID + "-q-" + String(questionID) }
+    var currentAnswerLocked: Bool {
+        isSubmitting || outbox.contains(batchID) || outbox.contains(finishID) || currentQuestion.map { outbox.contains(answerID($0.id)) } == true
+    }
 
     init(mode: PracticeMode, subject: String?, topic: String?, settings: PracticeSettings, token: String, userID: Int, api: APIClient = .shared) {
         self.mode = mode
@@ -96,8 +107,11 @@ final class PracticeSessionStore {
         defer { isLoading = false }
         let key = resumeKey
         let saved = PracticeResumeStore.load(key: key)
-        if let saved, !saved.questions.isEmpty, mode != .wrong {
+        // A queued attempt must be resumed, never replaced by a fresh due queue.
+        let hasPendingAttempt = saved?.attemptID.map { id in outbox.pending.contains { $0.id.hasPrefix(id + "-") } } ?? false
+        if let saved, !saved.questions.isEmpty, (mode == .random || hasPendingAttempt) {
             restore(saved)
+            restoreConfirmedSubmissions()
             return
         }
         if mode == .wrong, let saved { settings = saved.settings }
@@ -139,7 +153,7 @@ final class PracticeSessionStore {
     func feedbackForCurrent() -> AnswerFeedback? { currentQuestion.flatMap { feedback[String($0.id)] } }
 
     func tapOption(_ displayIndex: Int) async {
-        guard let question = currentQuestion, feedback[String(question.id)] == nil else { return }
+        guard !currentAnswerLocked, let question = currentQuestion, feedback[String(question.id)] == nil else { return }
         let key = String(question.id)
         guard !(excluded[key] ?? []).contains(displayIndex) else { return }
         Haptics.selection()
@@ -150,7 +164,7 @@ final class PracticeSessionStore {
             saveResume()
         } else {
             picks[key] = [displayIndex]
-            elapsedByQuestion[key] = currentElapsedMS()
+            checkpointTime()
             saveResume()
             if isImmediate {
                 await submitCurrent()
@@ -161,7 +175,7 @@ final class PracticeSessionStore {
     }
 
     func toggleExcluded(_ displayIndex: Int) {
-        guard let question = currentQuestion, feedback[String(question.id)] == nil else { return }
+        guard !currentAnswerLocked, let question = currentQuestion, feedback[String(question.id)] == nil else { return }
         let key = String(question.id)
         var values = excluded[key] ?? []
         if let position = values.firstIndex(of: displayIndex) {
@@ -189,32 +203,39 @@ final class PracticeSessionStore {
         isSubmitting = true; error = nil
         defer { isSubmitting = false }
         let original = question.originalPick(from: selected)
+        checkpointTime()
+        clockStart = nil
         let elapsed = currentElapsedMS()
         do {
             let value: PickValue = question.isMultiple ? .many(original) : .one(original.first ?? -1)
-            let result: AnswerFeedback = try await api.request("/api/practice/answer", method: .post, body: PracticeAnswerBody(questionID: question.id, picked: value, elapsedMS: elapsed, mode: mode.rawValue), token: token)
+            saveResume()
+            let result: AnswerFeedback = try await outbox.submit(id: answerID(question.id), path: "/api/practice/answer", body: PracticeAnswerBody(questionID: question.id, picked: value, elapsedMS: elapsed, mode: mode.rawValue), userID: userID, token: token)
             feedback[String(question.id)] = result
             elapsedByQuestion[String(question.id)] = elapsed
-            if let fav = result.favorite { questions[index].favorite = fav }
+            if let fav = result.favorite, let position = questions.firstIndex(where: { $0.id == question.id }) { questions[position].favorite = fav }
             result.correct ? Haptics.success() : Haptics.error()
             saveResume()
         } catch {
-            self.error = error.localizedDescription
+            self.error = (outbox.contains(answerID(question.id)) ? "答案已保存待确认。" : "答案未发送，请保留当前练习。") + error.localizedDescription
             Haptics.error()
         }
     }
 
     func next() {
-        guard canGoNext else { return }
+        guard canGoNext, !isSubmitting else { return }
+        checkpointTime()
         index += 1
+        clockStart = ProcessInfo.processInfo.systemUptime
         startedAt = Date()
         Haptics.selection()
         saveResume()
     }
 
     func previous() {
-        guard canGoBack else { return }
+        guard canGoBack, !isSubmitting else { return }
+        checkpointTime()
         index -= 1
+        clockStart = ProcessInfo.processInfo.systemUptime
         startedAt = Date()
         Haptics.selection()
         saveResume()
@@ -222,7 +243,8 @@ final class PracticeSessionStore {
 
     func submitBatch() async {
         guard isDeferred, !questions.isEmpty, !isSubmitting else { return }
-        if let q = currentQuestion { elapsedByQuestion[String(q.id)] = max(elapsedByQuestion[String(q.id)] ?? 0, currentElapsedMS()) }
+        checkpointTime()
+        clockStart = nil
         let answers = questions.map { question -> PracticeBatchAnswerBody in
             let display = picks[String(question.id)] ?? []
             let original = question.originalPick(from: display)
@@ -232,7 +254,8 @@ final class PracticeSessionStore {
         isSubmitting = true; error = nil
         defer { isSubmitting = false }
         do {
-            batchResult = try await api.request("/api/practice/submit", method: .post, body: PracticeBatchSubmitBody(mode: mode.rawValue, answers: answers), token: token)
+            saveResume()
+            batchResult = try await outbox.submit(id: batchID, path: "/api/practice/submit", body: PracticeBatchSubmitBody(mode: mode.rawValue, answers: answers), userID: userID, token: token)
             showBatchResult = true
             PracticeResumeStore.clear(key: resumeKey)
             Haptics.success()
@@ -242,6 +265,11 @@ final class PracticeSessionStore {
 
     func finishImmediateReview() async {
         guard isImmediate, !questions.isEmpty, !isSubmitting else { return }
+        restoreConfirmedSubmissions()
+        guard !outbox.pending.contains(where: { $0.id.hasPrefix(attemptID + "-q-") }) else {
+            error = "本组仍有待确认答案，请先到补交中心确认后再结束。"
+            return
+        }
         isSubmitting = true
         error = nil
         defer { isSubmitting = false }
@@ -253,11 +281,11 @@ final class PracticeSessionStore {
                 let answers = unanswered.map {
                     PracticeBatchAnswerBody(questionID: $0.id, picked: .many([]), elapsedMS: 0)
                 }
-                let response: PracticeBatchResult = try await api.request(
-                    "/api/practice/submit",
-                    method: .post,
+                saveResume()
+                let response: PracticeBatchResult = try await outbox.submit(
+                    id: finishID, path: "/api/practice/submit",
                     body: PracticeBatchSubmitBody(mode: mode.rawValue, answers: answers),
-                    token: token
+                    userID: userID, token: token
                 )
                 unansweredDetails = Dictionary(uniqueKeysWithValues: response.details.map { ($0.questionID, $0) })
             }
@@ -317,14 +345,10 @@ final class PracticeSessionStore {
     }
 
     func go(to newIndex: Int) {
-        guard questions.indices.contains(newIndex), newIndex != index else { return }
-        if let currentQuestion {
-            let key = String(currentQuestion.id)
-            if !(picks[key] ?? []).isEmpty {
-                elapsedByQuestion[key] = max(elapsedByQuestion[key] ?? 0, currentElapsedMS())
-            }
-        }
+        guard !isSubmitting, questions.indices.contains(newIndex), newIndex != index else { return }
+        checkpointTime()
         index = newIndex
+        clockStart = ProcessInfo.processInfo.systemUptime
         startedAt = Date()
         Haptics.selection()
         saveResume()
@@ -336,21 +360,21 @@ final class PracticeSessionStore {
     }
 
     func toggleFavorite() async {
-        guard let question = currentQuestion else { return }
+        guard let question = currentQuestion, !favoriteInFlight.contains(question.id) else { return }
+        favoriteInFlight.insert(question.id)
+        defer { favoriteInFlight.remove(question.id) }
         do {
             let response: FavoriteResponse = try await api.request("/api/questions/\(question.id)/favorite", method: .post, body: EmptyBody(), token: token)
             let next = response.favorite ?? !(question.favorite ?? false)
-            questions[index].favorite = next
+            if let position = questions.firstIndex(where: { $0.id == question.id }) { questions[position].favorite = next }
             Haptics.selection()
             saveResume()
         } catch { self.error = error.localizedDescription }
     }
 
     func saveProgressForExit() {
-        if let question = currentQuestion {
-            let key = String(question.id)
-            elapsedByQuestion[key] = max(elapsedByQuestion[key] ?? 0, currentElapsedMS())
-        }
+        checkpointTime()
+        clockStart = nil
         saveResume()
     }
 
@@ -368,22 +392,54 @@ final class PracticeSessionStore {
         batchResult = nil
         showBatchResult = false
         startedAt = Date()
+        clockStart = ProcessInfo.processInfo.systemUptime
+        attemptID = UUID().uuidString
     }
 
     private func advanceAfterDeferredAnswer() async {
         guard let question = currentQuestion else { return }
-        elapsedByQuestion[String(question.id)] = currentElapsedMS()
+        _ = question
+        checkpointTime()
         if canGoNext { next() }
         else { saveResume() }
     }
 
     private var resumeKey: String { PracticeResumeStore.key(userID: userID, mode: mode, subject: subject, topic: topic) }
 
-    private func currentElapsedMS() -> Int { max(0, Int(Date().timeIntervalSince(startedAt) * 1000)) }
+    private func currentElapsedMS() -> Int {
+        guard let q = currentQuestion else { return 0 }
+        let stored = elapsedByQuestion[String(q.id)] ?? 0
+        guard let clockStart, !outbox.contains(answerID(q.id)), !outbox.contains(batchID), feedback[String(q.id)] == nil else { return stored }
+        return min(86_400_000, stored + max(0, Int((ProcessInfo.processInfo.systemUptime - clockStart) * 1000)))
+    }
+
+    private func checkpointTime() {
+        if let q = currentQuestion { elapsedByQuestion[String(q.id)] = currentElapsedMS() }
+        if clockStart != nil { clockStart = ProcessInfo.processInfo.systemUptime }
+    }
+
+    func setActive(_ active: Bool) {
+        if active { clockStart = ProcessInfo.processInfo.systemUptime; restoreConfirmedSubmissions() }
+        else { saveProgressForExit() }
+    }
+
+    func restoreConfirmedSubmissions() {
+        for position in questions.indices {
+            let qid = questions[position].id
+            if let result = outbox.response(answerID(qid), as: AnswerFeedback.self) {
+                feedback[String(qid)] = result
+                if let fav = result.favorite { questions[position].favorite = fav }
+            }
+        }
+        if batchResult == nil, let result = outbox.response(batchID, as: PracticeBatchResult.self) {
+            batchResult = result; showBatchResult = true
+            PracticeResumeStore.clear(key: resumeKey)
+        } else { saveResume() }
+    }
 
     private func saveResume() {
         guard !questions.isEmpty, batchResult == nil else { return }
-        PracticeResumeStore.save(PracticeResumeSnapshot(savedAt: Date(), mode: mode, subject: subject, topic: topic, settings: settings, questions: questions, index: index, picks: picks, feedback: feedback, excluded: excluded, elapsed: elapsedByQuestion), key: resumeKey)
+        PracticeResumeStore.save(PracticeResumeSnapshot(savedAt: Date(), mode: mode, subject: subject, topic: topic, settings: settings, questions: questions, index: index, picks: picks, feedback: feedback, excluded: excluded, elapsed: elapsedByQuestion, attemptID: attemptID), key: resumeKey)
     }
 
     private func reconcileWrongResume(_ snapshot: PracticeResumeSnapshot, current: [Question]) {
@@ -412,6 +468,7 @@ final class PracticeSessionStore {
     }
 
     private func restore(_ snapshot: PracticeResumeSnapshot) {
+        attemptID = snapshot.attemptID ?? UUID().uuidString
         settings = snapshot.settings
         questions = snapshot.questions
         index = min(max(0, snapshot.index), max(0, snapshot.questions.count - 1))

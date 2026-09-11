@@ -19,6 +19,9 @@ final class SessionStore {
 
     private(set) var token: String?
     let api = APIClient.shared
+    let submissions = PracticeOutbox.shared
+    private var submissionTask: Task<Void, Never>?
+    private var identityVerified = false
     private var realtimeSocket: URLSessionWebSocketTask?
     private var realtimeReceiveTask: Task<Void, Never>?
     private var realtimePingTask: Task<Void, Never>?
@@ -45,18 +48,24 @@ final class SessionStore {
         isBootstrapping = true
         defer { isBootstrapping = false }
         do {
-            user = try await api.request("/api/auth/me", token: token)
+            let loaded: User = try await api.request("/api/auth/me", token: token)
+            guard self.token == token else { return }
+            user = loaded
+            identityVerified = true
             persistCurrentUser()
+            startSubmissionSync()
             startRealtime()
 
             async let homeRefresh: Void = refreshHomeSnapshotSilently()
             async let unreadRefresh: Void = refreshUnreadCount()
             _ = await (homeRefresh, unreadRefresh)
         } catch let error as APIError where error.statusCode == 401 || error.statusCode == 403 {
+            guard self.token == token else { return }
             let message = error.localizedDescription
             logout()
             lastError = message
         } catch {
+            guard self.token == token else { return }
             lastError = error.localizedDescription
         }
     }
@@ -75,28 +84,38 @@ final class SessionStore {
 
     func refreshUser() async throws {
         guard let token else { return }
-        user = try await api.request("/api/auth/me", token: token)
+        let loaded: User = try await api.request("/api/auth/me", token: token)
+        guard self.token == token else { return }
+        user = loaded
         persistCurrentUser()
         await refreshUnreadCount()
     }
 
     func replaceToken(_ newToken: String, user newUser: User) {
+        stopRealtime()
+        submissionTask?.cancel(); submissionTask = nil
         token = newToken
         user = newUser
+        identityVerified = true
         KeychainStore.save(newToken, key: KeychainStore.authTokenKey)
         persistCurrentUser()
         hydrateHomeCache(for: newUser.id)
         startRealtime()
+        startSubmissionSync()
     }
 
     func updateCurrentUser(_ newUser: User) {
+        guard newUser.id == user?.id else { return }
         user = newUser
         persistCurrentUser()
     }
 
     func logout() {
         stopRealtime()
+        submissionTask?.cancel(); submissionTask = nil
+        submissions.deactivate()
         token = nil
+        identityVerified = false
         user = nil
         lastError = nil
         unreadNotifications = 0
@@ -142,11 +161,17 @@ final class SessionStore {
             "/api/exams/calendar/summary/me", token: token, cacheKey: "\(prefix).calendar"
         )
 
-        homeStats = try await statsTask
-        homeSmartReview = try? await reviewTask
-        homeChallenge = try? await challengeTask
-        homeDiagnostics = try? await diagnosticsTask
-        homeCalendarSummary = try? await calendarTask
+        let stats = try await statsTask
+        let review = try? await reviewTask
+        let challenge = try? await challengeTask
+        let diagnostics = try? await diagnosticsTask
+        let calendar = try? await calendarTask
+        guard self.token == token, user?.id == userID else { return }
+        homeStats = stats
+        homeSmartReview = review
+        homeChallenge = challenge
+        homeDiagnostics = diagnostics
+        homeCalendarSummary = calendar
     }
 
     private func hydrateHomeCache(for userID: Int) {
@@ -166,11 +191,13 @@ final class SessionStore {
     func appBecameActive() {
         guard isAuthenticated else { return }
         startRealtime()
+        startSubmissionSync()
     }
 
     func appBecameInactive() {
         guard let token else { return }
         stopRealtime()
+        submissionTask?.cancel(); submissionTask = nil
         Task {
             let _: EmptyResponse? = try? await api.request("/api/presence/offline", method: .post, body: EmptyBody(), token: token)
         }
@@ -179,6 +206,7 @@ final class SessionStore {
     func refreshUnreadCount() async {
         guard let token else { unreadNotifications = 0; return }
         if let response: UnreadCountResponse = try? await api.request("/api/notifications/unread-count", token: token) {
+            guard self.token == token else { return }
             unreadNotifications = response.unread
         }
     }
@@ -247,6 +275,7 @@ final class SessionStore {
     }
 
     private func handleRealtime(_ event: RealtimeEnvelope, socket: URLSessionWebSocketTask) {
+        guard realtimeSocket === socket else { return }
         switch event.type {
         case "connected":
             realtimeConnected = true
@@ -281,6 +310,7 @@ final class SessionStore {
                 guard let self else { return }
                 do {
                     let state: RealtimeFallbackResponse = try await self.api.request("/api/realtime/fallback", token: token)
+                    guard !Task.isCancelled, self.token == token else { return }
                     self.unreadNotifications = state.unread
                     self.pendingFriendInvite = state.invite
                 } catch { }
@@ -297,6 +327,21 @@ final class SessionStore {
     private func setAuthenticated(_ response: AuthResponse) {
         replaceToken(response.token, user: response.user)
         Haptics.success()
+    }
+
+    private func startSubmissionSync() {
+        // Cached profile and Keychain token may come from different moments after a crash.
+        // Never replay account-scoped writes until /auth/me or login confirms the identity.
+        guard identityVerified, let token, let userID = user?.id else { return }
+        submissions.activate(userID: userID, token: token)
+        guard submissionTask == nil else { return }
+        submissionTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self, self.token == token, self.user?.id == userID else { return }
+                await self.submissions.retryPending()
+                do { try await Task.sleep(for: .seconds(30)) } catch { return }
+            }
+        }
     }
 }
 

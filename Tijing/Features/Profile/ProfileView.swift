@@ -157,6 +157,10 @@ struct ProfileView: View {
         VStack(spacing: 12) {
             TijingSectionHeading("记录与社交")
             TijingSettingsGroup {
+                navRow("学习周报 · 目标计划", subtitle: "与网页版同步复习与目标", icon: "calendar.badge.clock", tint: TijingDesign.sage) { StudyPlanView() }
+                Divider().padding(.leading, 62)
+                navRow("补交中心", subtitle: "查看本机待确认答案", icon: "arrow.triangle.2.circlepath", tint: TijingDesign.sky) { PracticeDeliveryView() }
+                Divider().padding(.leading, 62)
                 navRow("历史战绩", subtitle: "回看对局和逐题详情", icon: "clock.arrow.circlepath", tint: TijingDesign.lilac) { BattleHistoryView() }
                 Divider().padding(.leading, 62)
                 navRow("通知中心", subtitle: "好友、挑战和系统消息", icon: "bell.fill", tint: TijingDesign.rose, trailing: session.unreadNotifications > 0 ? "\(session.unreadNotifications)" : nil) { NotificationsView() }

@@ -135,7 +135,8 @@ struct RootView: View {
             if phase == .active { session.appBecameActive() }
             else if phase == .background { session.appBecameInactive() }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .tijingAuthInvalid)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: .tijingAuthInvalid).receive(on: DispatchQueue.main)) { notification in
+            guard let invalidToken = notification.object as? String, invalidToken == session.token else { return }
             session.logout()
             session.lastError = "登录状态已失效，请重新登录"
             selectedTab = .home

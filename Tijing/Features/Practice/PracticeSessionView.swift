@@ -2,6 +2,8 @@ import SwiftUI
 
 struct PracticeSessionView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(SessionStore.self) private var session
     @State var store: PracticeSessionStore
     @State private var confirmSubmit = false
     @State private var showAnswerSheet = false
@@ -51,7 +53,11 @@ struct PracticeSessionView: View {
                 bottomControls(question)
             }
         }
-        .task { await store.load() }
+        .task { await store.load(); store.setActive(scenePhase == .active) }
+        .onChange(of: scenePhase) { _, phase in store.setActive(phase == .active) }
+        .onChange(of: session.submissions.revision) { _, _ in store.restoreConfirmedSubmissions() }
+        .onChange(of: session.token) { _, _ in store.saveProgressForExit(); dismiss() }
+        .onDisappear { store.saveProgressForExit() }
         .confirmationDialog("确认交卷？", isPresented: $confirmSubmit, titleVisibility: .visible) {
             Button("确认交卷") { Task { await store.submitBatch() } }
             Button("继续答题", role: .cancel) {}
@@ -159,6 +165,11 @@ struct PracticeSessionView: View {
                         .font(.footnote)
                         .foregroundStyle(.red)
                 }
+                if store.currentAnswerLocked && store.feedbackForCurrent() == nil {
+                    NavigationLink { PracticeDeliveryView() } label: {
+                        Label("答案已保存或正在确认，查看补交中心", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                }
 
             }
             .padding(.horizontal)
@@ -220,7 +231,7 @@ struct PracticeSessionView: View {
                     Label("上一题", systemImage: "chevron.left")
                 }
                 .buttonStyle(.bordered)
-                .disabled(!store.canGoBack)
+                .disabled(!store.canGoBack || store.isSubmitting)
 
                 Spacer(minLength: 12)
 
@@ -234,11 +245,11 @@ struct PracticeSessionView: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .disabled(true)
-                    } else if question.isMultiple && hasSelection && !hasFeedback {
+                    } else if hasSelection && !hasFeedback {
                         Button {
-                            Task { await store.confirmMultiple() }
+                            Task { await store.submitCurrent() }
                         } label: {
-                            Label("提交答案", systemImage: "paperplane.fill")
+                            Label(store.currentAnswerLocked ? "重试确认" : "提交答案", systemImage: "paperplane.fill")
                         }
                         .buttonStyle(.borderedProminent)
                         .disabled(store.isSubmitting)

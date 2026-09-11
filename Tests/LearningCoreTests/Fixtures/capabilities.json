@@ -1,0 +1,6 @@
+{
+  "request_id_deduplication": true,
+  "protocol_version": 1,
+  "scope": "ordinary_practice",
+  "weekly_timezone": "UTC+08:00"
+}
