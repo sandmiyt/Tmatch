@@ -5,17 +5,23 @@ nonisolated enum KeychainStore {
     static let authTokenKey = "tijing.auth.token"
     private static let service = Bundle.main.bundleIdentifier ?? "com.xiaocai.tijing"
 
-    static func save(_ value: String, key: String) {
-        guard let data = value.data(using: .utf8) else { return }
-        delete(key: key)
+    static func save(_ value: String, key: String) throws {
+        let data = Data(value.utf8)
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: key,
-            kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            kSecAttrAccount as String: key
         ]
-        SecItemAdd(query as CFDictionary, nil)
+        let attributes: [String: Any] = [kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly]
+        var status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        if status == errSecItemNotFound {
+            status = SecItemAdd(query.merging(attributes) { _, new in new } as CFDictionary, nil)
+        }
+        guard status == errSecSuccess else {
+            throw NSError(domain: NSOSStatusErrorDomain, code: Int(status), userInfo: [
+                NSLocalizedDescriptionKey: "登录凭据保存失败（\(status)），请稍后重试"])
+        }
     }
 
     static func read(key: String) -> String? {

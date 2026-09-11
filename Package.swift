@@ -5,7 +5,7 @@ import PackageDescription
 let package = Package(name: "TijingLearningCore", platforms: [.macOS(.v14)], targets: [
     .target(name: "TijingLearningCore", path: "Tijing", sources: [
         "Core/APIClient.swift", "Core/PracticeOutbox.swift", "Models/User.swift",
-        "Models/Question.swift"
+        "Models/Question.swift", "Models/BattleModels.swift"
     ]),
     .testTarget(name: "TijingLearningCoreTests", dependencies: ["TijingLearningCore"], path: "Tests/LearningCoreTests", resources: [.process("Fixtures")])
 ])

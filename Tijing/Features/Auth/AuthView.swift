@@ -325,6 +325,9 @@ struct AuthView: View {
     private func successView(_ result: AuthPendingResult) -> some View {
         ScrollView {
             VStack(spacing: 18) {
+                if isError, let message {
+                    Text(message).font(.footnote).foregroundStyle(.red)
+                }
                 TijingPaperCard(tint: TijingDesign.sage, rotation: -0.3) {
                     VStack(alignment: .leading, spacing: 15) {
                         TijingStickerIcon(systemImage: "checkmark.shield.fill", tint: TijingDesign.mint, background: TijingDesign.sage, size: 60, rotation: -7)
@@ -367,9 +370,14 @@ struct AuthView: View {
 
                 Button(result.token != nil && result.user != nil ? "进入题竞" : "返回登录") {
                     if let token = result.token, let user = result.user {
-                        session.replaceToken(token, user: user)
-                        Haptics.success()
-                        dismiss()
+                        do {
+                            try session.replaceToken(token, user: user)
+                            Haptics.success()
+                            dismiss()
+                        } catch {
+                            message = error.localizedDescription
+                            isError = true
+                        }
                     } else {
                         pending = nil
                         mode = .login

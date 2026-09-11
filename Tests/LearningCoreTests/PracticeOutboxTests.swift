@@ -152,4 +152,39 @@ import XCTest
         clock.addTimeInterval(61)
         await queue.retryPending(); XCTAssertEqual(writes, 2); XCTAssertTrue(queue.pending.isEmpty)
     }
+
+    func testExplicitRetryCanRecoverBlockedReceiptWithoutChangingPayload() async throws {
+        var clock = Date()
+        var sent: [Data] = []
+        let queue = PracticeOutbox(root: try temporary(), transport: { _, payload, _ in
+            guard let payload else { return self.capability }
+            sent.append(payload)
+            if sent.count == 1 { throw APIError(message: "conflict", statusCode: 409, retryAfter: nil) }
+            return self.answer
+        }, now: { clock })
+        queue.activate(userID: 1, token: "a")
+        do { let _: AnswerFeedback = try await queue.submit(id: "recover", path: "/api/practice/answer", body: body(), userID: 1, token: "a") } catch { }
+        clock.addTimeInterval(600)
+        await queue.retryPending()
+        XCTAssertEqual(sent.count, 1)
+        let _: AnswerFeedback = try await queue.submit(id: "recover", path: "/api/practice/answer", body: body(0), userID: 1, token: "a")
+        XCTAssertEqual(sent.count, 2); XCTAssertEqual(sent[0], sent[1])
+        XCTAssertTrue(queue.pending.isEmpty)
+    }
+
+    func testAcknowledgedReceiptsAreLoadedLazilyAndPreserved() async throws {
+        let root = try temporary()
+        let queue = PracticeOutbox(root: root, transport: { _, payload, _ in payload == nil ? self.capability : self.answer })
+        queue.activate(userID: 1, token: "a")
+        for index in 0..<50 {
+            let _: AnswerFeedback = try await queue.submit(id: "history-\(index)", path: "/api/practice/answer", body: body(), userID: 1, token: "a")
+        }
+        let restored = PracticeOutbox(root: root, transport: { _, _, _ in XCTFail("Must not resend archived answers"); return self.answer })
+        restored.activate(userID: 1, token: "a")
+        XCTAssertTrue(restored.entries.isEmpty)
+        XCTAssertTrue(restored.contains("history-49"))
+        XCTAssertEqual(restored.response("history-49", as: AnswerFeedback.self)?.correct, true)
+        let _: AnswerFeedback = try await restored.submit(id: "history-49", path: "/api/practice/answer", body: body(0), userID: 1, token: "a")
+        XCTAssertFalse(restored.contains("../history-49"))
+    }
 }

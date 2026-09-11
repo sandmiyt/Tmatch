@@ -73,7 +73,7 @@ final class SessionStore {
     func login(account: String, password: String) async throws {
         let payload = LoginBody(nickname: account, username: nil, password: password)
         let response: AuthResponse = try await api.request("/api/auth/login", method: .post, body: payload)
-        setAuthenticated(response)
+        try setAuthenticated(response)
     }
 
     func register(nickname: String, password: String, email: String, code: String) async throws -> AuthResponse {
@@ -91,13 +91,13 @@ final class SessionStore {
         await refreshUnreadCount()
     }
 
-    func replaceToken(_ newToken: String, user newUser: User) {
+    func replaceToken(_ newToken: String, user newUser: User) throws {
+        try KeychainStore.save(newToken, key: KeychainStore.authTokenKey)
         stopRealtime()
         submissionTask?.cancel(); submissionTask = nil
         token = newToken
         user = newUser
         identityVerified = true
-        KeychainStore.save(newToken, key: KeychainStore.authTokenKey)
         persistCurrentUser()
         hydrateHomeCache(for: newUser.id)
         startRealtime()
@@ -286,6 +286,9 @@ final class SessionStore {
             Task { try? await socket.send(.string("{\"type\":\"sync\"}")) }
         case "ranking_changed":
             rankingRevision &+= 1
+        case "session_replaced":
+            logout()
+            lastError = "该账号已在另一台设备登录，本设备已退出。"
         case "account_banned":
             let reason = "账号当前已被封禁，请稍后再试"
             logout()
@@ -324,8 +327,8 @@ final class SessionStore {
         return "{\"type\":\"auth\",\"token\":\"\(escaped)\"}"
     }
 
-    private func setAuthenticated(_ response: AuthResponse) {
-        replaceToken(response.token, user: response.user)
+    private func setAuthenticated(_ response: AuthResponse) throws {
+        try replaceToken(response.token, user: response.user)
         Haptics.success()
     }
 

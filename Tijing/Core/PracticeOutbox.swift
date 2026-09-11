@@ -61,9 +61,10 @@ final class PracticeOutbox {
             try resource.setResourceValues(values)
             // Do not silently replace a damaged queue with an empty one.
             entries = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
-                .filter { $0.pathExtension == "json" }.map {
+                .filter { $0.pathExtension == "json" }.compactMap {
                     let receipt = try JSONDecoder().decode(PracticeReceipt.self, from: Data(contentsOf: $0))
                     guard receipt.owner == userID else { throw failure("补交记录账号校验失败") }
+                    if receipt.response != nil, archive(receipt, in: folder) { return nil }
                     return receipt
                 }.sorted { $0.createdAt < $1.createdAt }
         } catch { storageError = "本地补交记录无法读取，请保留 App 数据并联系支持：\(error.localizedDescription)" }
@@ -78,9 +79,11 @@ final class PracticeOutbox {
         revision &+= 1
     }
 
-    func contains(_ id: String) -> Bool { entries.contains { $0.id == id } }
+    func contains(_ id: String) -> Bool {
+        entries.contains { $0.id == id } || archiveURL(id).map { FileManager.default.fileExists(atPath: $0.path) } == true
+    }
     func response<T: Decodable>(_ id: String, as type: T.Type) -> T? {
-        guard let data = entries.first(where: { $0.id == id })?.response else { return nil }
+        guard let data = (try? receipt(id))?.response else { return nil }
         return try? JSONDecoder().decode(type, from: data)
     }
 
@@ -100,7 +103,9 @@ final class PracticeOutbox {
             try persist(receipt) // Must succeed BEFORE any network write.
             entries.append(receipt); revision &+= 1
         }
-        let data = try await deliver(id)
+        // Only an explicit retry from the existing practice page can retry a blocked receipt.
+        // The original request ID and immutable payload are retained; automatic replay stays blocked.
+        let data = try await deliver(id, allowBlockedRetry: true)
         return try JSONDecoder().decode(T.self, from: data)
     }
 
@@ -114,19 +119,20 @@ final class PracticeOutbox {
         }
     }
 
-    private func deliver(_ id: String) async throws -> Data {
-        guard let receipt = entries.first(where: { $0.id == id }), let token, let directory else {
+    private func deliver(_ id: String, allowBlockedRetry: Bool = false) async throws -> Data {
+        guard let receipt = try receipt(id), let token, let directory else {
             throw failure("请登录原账号后补交")
         }
         if let response = receipt.response { return response }
         if let task = inFlight[id] { return try await task.value }
-        if receipt.blocked { throw failure(receipt.message ?? "提交需要处理，请联系支持") }
+        if receipt.blocked && !allowBlockedRetry { throw failure("\(receipt.message ?? "提交需要处理")（提交编号：\(id)）") }
         guard receipt.nextAttemptAt <= now() else { throw failure("已保存待补交，请稍后重试") }
         let epoch = generation
         let task = Task { () throws -> Data in
             var updated = receipt
+            var writeAuthorized = false
             do {
-                if !self.capabilitiesVerified {
+                if !self.capabilitiesVerified || receipt.blocked {
                     let data = try await self.send("/api/practice/capabilities", payload: nil, token: token)
                     let capabilities = try JSONDecoder().decode(Capabilities.self, from: data)
                     guard capabilities.request_id_deduplication else { throw self.failure("请先更新网页版后端，再补交练习") }
@@ -134,26 +140,34 @@ final class PracticeOutbox {
                     guard self.generation == epoch else { throw CancellationError() }
                     self.capabilitiesVerified = true
                 }
+                try Task.checkCancellation()
+                guard self.generation == epoch else { throw CancellationError() }
+                writeAuthorized = true
                 let data = try await self.send(receipt.path, payload: receipt.payload, token: token)
                 // Never acknowledge a 200 response with an incompatible body.
                 if receipt.path == "/api/practice/answer" { _ = try JSONDecoder().decode(AnswerFeedback.self, from: data) }
                 else { _ = try JSONDecoder().decode(PracticeBatchResult.self, from: data) }
-                updated.response = data; updated.message = nil
+                updated.response = data; updated.message = nil; updated.blocked = false
                 // Saving into the captured owner's folder is safe even if the account changed.
                 try self.persist(updated, in: directory)
-                if self.generation == epoch { self.replace(updated) }
+                let archived = self.archive(updated, in: directory)
+                if self.generation == epoch {
+                    if archived { self.entries.removeAll { $0.id == id }; self.revision &+= 1 }
+                    else { self.replace(updated) }
+                }
                 return data
             } catch {
                 updated.attempts += 1
                 let apiError = error as? APIError
-                updated.blocked = [400, 404, 409, 422].contains(apiError?.statusCode ?? 0) && self.capabilitiesVerified
-                updated.message = error.localizedDescription
+                updated.blocked = receipt.blocked || ([400, 404, 409, 422].contains(apiError?.statusCode ?? 0) && writeAuthorized)
+                updated.message = "\(error.localizedDescription)（提交编号：\(id)）"
                 let delay = max(apiError?.retryAfter ?? 0, min(300, 5 * (1 << min(updated.attempts, 6))))
                 updated.nextAttemptAt = self.now().addingTimeInterval(Double(delay))
                 // Failure to save is surfaced; the previously saved immutable payload remains intact.
                 do { try self.persist(updated, in: directory) }
                 catch { if self.generation == epoch { self.storageError = "补交状态保存失败，请勿卸载 App" } }
                 if self.generation == epoch { self.replace(updated) }
+                if updated.blocked { throw self.failure(updated.message ?? "提交需要处理") }
                 throw error
             }
         }
@@ -165,6 +179,30 @@ final class PracticeOutbox {
     private func send(_ path: String, payload: Data?, token: String) async throws -> Data {
         if let transport { return try await transport(path, payload, token) }
         return try await api.requestData(path, method: payload == nil ? .get : .post, bodyData: payload, token: token)
+    }
+    private func archiveURL(_ id: String) -> URL? {
+        guard id.range(of: "^[A-Za-z0-9_-]{1,96}$", options: .regularExpression) != nil else { return nil }
+        return directory?.appendingPathComponent("acknowledged", isDirectory: true).appendingPathComponent(id + ".json")
+    }
+    private func receipt(_ id: String) throws -> PracticeReceipt? {
+        if let value = entries.first(where: { $0.id == id }) { return value }
+        guard let url = archiveURL(id), FileManager.default.fileExists(atPath: url.path) else { return nil }
+        let value = try JSONDecoder().decode(PracticeReceipt.self, from: Data(contentsOf: url))
+        guard value.owner == owner, value.id == id, value.response != nil else { throw failure("历史提交回执校验失败，请保留 App 数据") }
+        return value
+    }
+    // Keep full receipts on disk for crash recovery, but load them only when a snapshot needs one.
+    // Write the archive atomically before removing its active-queue copy; failure keeps that copy.
+    private func archive(_ value: PracticeReceipt, in folder: URL) -> Bool {
+        guard value.response != nil,
+              value.id.range(of: "^[A-Za-z0-9_-]{1,96}$", options: .regularExpression) != nil else { return false }
+        do {
+            let archive = folder.appendingPathComponent("acknowledged", isDirectory: true)
+            try FileManager.default.createDirectory(at: archive, withIntermediateDirectories: true)
+            try persist(value, in: archive)
+            try FileManager.default.removeItem(at: folder.appendingPathComponent(value.id + ".json"))
+            return true
+        } catch { return false }
     }
     private func persist(_ receipt: PracticeReceipt, in folder: URL? = nil) throws {
         guard let folder = folder ?? directory else { throw failure("补交存储未就绪") }

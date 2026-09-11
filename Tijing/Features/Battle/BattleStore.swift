@@ -158,6 +158,7 @@ final class BattleRoomStore {
                 @unknown default: data = nil
                 }
                 if let data, let state = try? JSONDecoder().decode(BattleState.self, from: data) {
+                    guard !Task.isCancelled, socket === task else { return }
                     networkHint = nil
                     apply(state)
                 }
@@ -232,6 +233,8 @@ final class BattleRoomStore {
     }
 
     private func apply(_ newState: BattleState) {
+        guard !Task.isCancelled, newState.roomID == roomID else { return }
+        if let state, !newState.canReplace(state) { return }
         let oldQuestion = state?.questionIndex
         let oldFeedback = state?.myFeedback
         let wasFinished = state?.finished == true

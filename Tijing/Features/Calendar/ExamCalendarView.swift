@@ -13,6 +13,7 @@ struct ExamCalendarView: View {
     @State private var selectedExam: RecruitmentExam?
     @State private var followedItems: [RecruitmentExam] = []
     @State private var followedCarouselIndex = 0
+    @State private var loadRequest = UUID()
 
     var body: some View {
         ZStack {
@@ -51,7 +52,10 @@ struct ExamCalendarView: View {
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
-        .task(id: session.isAuthenticated) { await load() }
+        .task(id: session.token) {
+            response = nil; followedItems = []; followedCarouselIndex = 0
+            await load()
+        }
         .task(id: followedItems.map(\.id)) { await runFollowedCarousel() }
         .refreshable { await load() }
         .sensoryFeedback(.selection, trigger: province)
@@ -418,18 +422,24 @@ struct ExamCalendarView: View {
     }
 
     @MainActor private func load() async {
-        let path = session.token == nil ? "/api/exams/calendar" : "/api/exams/calendar/me"
+        let request = UUID()
+        loadRequest = request
+        let token = session.token
+        let path = token == nil ? "/api/exams/calendar" : "/api/exams/calendar/me"
         let owner = session.user.map { String($0.id) } ?? "public"
         let cacheKey = "calendar.\(owner).all"
 
         if response == nil { response = session.api.cachedResponse(for: cacheKey) }
         loading = response == nil
-        defer { loading = false }
+        defer { if loadRequest == request { loading = false } }
         do {
-            response = try await session.api.requestCached(
-                path, token: session.token, cacheKey: cacheKey
+            let loaded: ExamCalendarResponse = try await session.api.requestCached(
+                path, token: token, cacheKey: cacheKey
             )
-            if let token = session.token {
+            guard !Task.isCancelled, loadRequest == request, session.token == token,
+                  (session.user.map { String($0.id) } ?? "public") == owner else { return }
+            response = loaded
+            if let token {
                 let followedQuery = [URLQueryItem(name: "followed_only", value: "true")]
                 if let followedResponse: ExamCalendarResponse = try? await session.api.requestCached(
                     "/api/exams/calendar/me",
@@ -437,6 +447,8 @@ struct ExamCalendarView: View {
                     query: followedQuery,
                     cacheKey: "calendar.\(owner).followed.carousel"
                 ) {
+                    guard !Task.isCancelled, loadRequest == request, session.token == token,
+                          (session.user.map { String($0.id) } ?? "public") == owner else { return }
                     followedItems = followedResponse.items.filter { $0.followed == true }
                     if followedCarouselIndex >= followedItems.count { followedCarouselIndex = 0 }
                 }
@@ -444,20 +456,27 @@ struct ExamCalendarView: View {
                 followedItems = []
                 followedCarouselIndex = 0
             }
+            guard !Task.isCancelled, loadRequest == request, session.token == token else { return }
             error = nil
         } catch {
+            guard !Task.isCancelled, loadRequest == request, session.token == token else { return }
             self.error = response == nil ? error.localizedDescription : nil
         }
     }
 
     private func toggleFollow(_ exam: RecruitmentExam) {
         guard let token = session.token else { error = "登录后才能关注考试"; return }
+        loadRequest = UUID()
         Task { @MainActor in
             do {
                 let method: HTTPMethod = exam.followed == true ? .delete : .post
                 let _: FollowResponse = try await session.api.request("/api/exams/calendar/\(exam.id)/follow", method: method, body: EmptyBody(), token: token)
+                guard session.token == token else { return }
                 Haptics.success(); await load()
-            } catch { self.error = error.localizedDescription; Haptics.error() }
+            } catch {
+                guard session.token == token else { return }
+                self.error = error.localizedDescription; Haptics.error()
+            }
         }
     }
 }

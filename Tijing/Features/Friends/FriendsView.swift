@@ -6,6 +6,7 @@ struct FriendsView: View {
     @State private var incoming: [FriendRelation] = []
     @State private var outgoing: [FriendRelation] = []
     @State private var searchText = ""
+    @State private var searchRequest = UUID()
     @State private var searchResults: [User] = []
     @State private var blocked: [BlockedItem] = []
     @State private var error: String?
@@ -122,7 +123,7 @@ struct FriendsView: View {
             await load()
             await presenceLoop()
         }
-        .task(id: searchText) { await search() }
+        .task(id: [searchText, session.token ?? ""]) { searchResults = []; await search() }
         .refreshable { await load() }
         .sheet(item: $inviteTarget) { user in
             FriendChallengeSetupSheet(user: user) { subject, topic in
@@ -277,14 +278,23 @@ struct FriendsView: View {
     }
 
     @MainActor private func search() async {
+        let request = UUID()
+        searchRequest = request
+        let owner = session.user?.id
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard query.count >= 1, let token = session.token else { searchResults = []; return }
         try? await Task.sleep(for: .milliseconds(300))
         guard !Task.isCancelled else { return }
         do {
             let response: UserSearchResponse = try await session.api.request("/api/users/search", token: token, query: [URLQueryItem(name: "q", value: query)])
+            guard !Task.isCancelled, searchRequest == request, session.token == token,
+                  session.user?.id == owner, searchText.trimmingCharacters(in: .whitespacesAndNewlines) == query else { return }
             searchResults = response.items
-        } catch { searchResults = [] }
+        } catch {
+            guard !Task.isCancelled, searchRequest == request, session.token == token,
+                  session.user?.id == owner, searchText.trimmingCharacters(in: .whitespacesAndNewlines) == query else { return }
+            searchResults = []
+        }
     }
 
     private func accept(_ relation: FriendRelation) { mutate("/api/friends/\(relation.relationID)/accept", method: .post) }

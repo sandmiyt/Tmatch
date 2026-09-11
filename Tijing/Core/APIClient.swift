@@ -1,6 +1,43 @@
 import Foundation
 import CryptoKit
 
+/// Serializes disk operations and rejects responses that predate a newer request or cache invalidation.
+final class OrderedResponseCache: @unchecked Sendable {
+    private let lock = NSLock()
+    private let directory: URL
+    private var tickets: [String: UUID] = [:]
+    init(directory: URL) { self.directory = directory }
+    func begin(_ key: String) -> UUID {
+        lock.lock(); defer { lock.unlock() }
+        let ticket = UUID(); tickets[key] = ticket; return ticket
+    }
+    func store(_ data: Data, key: String, ticket: UUID) {
+        lock.lock(); defer { lock.unlock() }
+        guard tickets[key] == ticket else { return }
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try? data.write(to: url(key), options: .atomic)
+    }
+    func read(_ key: String) -> Data? {
+        lock.lock(); defer { lock.unlock() }
+        return try? Data(contentsOf: url(key))
+    }
+    func remove(_ key: String) {
+        lock.lock(); defer { lock.unlock() }
+        tickets.removeValue(forKey: key)
+        try? FileManager.default.removeItem(at: url(key))
+    }
+    func clear() {
+        lock.lock(); defer { lock.unlock() }
+        tickets.removeAll()
+        let files = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
+        for file in files where file.pathExtension == "json" { try? FileManager.default.removeItem(at: file) }
+    }
+    private func url(_ key: String) -> URL {
+        let digest = SHA256.hash(data: Data(key.utf8)).map { String(format: "%02x", $0) }.joined()
+        return directory.appendingPathComponent(digest).appendingPathExtension("json")
+    }
+}
+
 extension Notification.Name {
     static let tijingAuthInvalid = Notification.Name("tijing.auth.invalid")
 }
@@ -67,7 +104,7 @@ final class APIClient: @unchecked Sendable {
     }
 
     func removeCachedResponse(for cacheKey: String) {
-        try? FileManager.default.removeItem(at: Self.responseCacheURL(for: cacheKey))
+        Self.responseCache.remove(cacheKey)
     }
 
     func clearResponseCache() {
@@ -105,10 +142,13 @@ final class APIClient: @unchecked Sendable {
         headers: [String: String],
         responseCacheKey: String?
     ) async throws -> Response {
+        let cacheTicket = responseCacheKey.map { Self.responseCache.begin($0) }
         let data = try await requestData(path, method: method, bodyData: bodyData, token: token, query: query, headers: headers)
         do {
             let decoded = try JSONDecoder().decode(Response.self, from: data)
-            if let responseCacheKey { Self.storeCachedResponseData(data, for: responseCacheKey) }
+            if let responseCacheKey, let cacheTicket, !Task.isCancelled {
+                Self.responseCache.store(data, key: responseCacheKey, ticket: cacheTicket)
+            }
             return decoded
         } catch {
             throw APIError(message: "服务器数据格式与当前客户端不兼容", statusCode: 200, retryAfter: nil)
@@ -216,22 +256,18 @@ final class APIClient: @unchecked Sendable {
     }
 
     private static func readCachedResponseData(for key: String) -> Data? {
-        try? Data(contentsOf: responseCacheURL(for: key), options: [.mappedIfSafe])
+        responseCache.read(key)
     }
 
     private static func storeCachedResponseData(_ data: Data, for key: String) {
-        let url = responseCacheURL(for: key)
-        Task.detached(priority: .utility) {
-            try? data.write(to: url, options: .atomic)
-        }
+        responseCache.store(data, key: key, ticket: responseCache.begin(key))
     }
 
     private static func clearCachedResponses() {
-        guard let urls = try? FileManager.default.contentsOfDirectory(
-            at: responseCacheDirectory, includingPropertiesForKeys: nil
-        ) else { return }
-        for url in urls { try? FileManager.default.removeItem(at: url) }
+        responseCache.clear()
     }
+
+    private static let responseCache = OrderedResponseCache(directory: responseCacheDirectory)
 
     private static func errorMessage(from data: Data) -> String? {
         guard !data.isEmpty,

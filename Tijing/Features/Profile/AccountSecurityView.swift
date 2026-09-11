@@ -187,7 +187,7 @@ struct AccountSecurityView: View {
                 "/api/account/change-password", method: .post,
                 body: ChangePasswordBody(currentPassword: passwordCurrent, newPassword: newPassword), token: token
             )
-            session.replaceToken(response.token, user: response.user)
+            try session.replaceToken(response.token, user: response.user)
             passwordCurrent = ""; newPassword = ""; confirmPassword = ""
             message = "密码修改成功，其他设备上的旧登录已失效。"
         }

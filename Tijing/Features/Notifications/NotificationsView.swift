@@ -8,6 +8,7 @@ struct NotificationsView: View {
     @State private var selectedChallenge: ChallengeRoute?
     @State private var selectedUserCard: UserCardTarget?
     @State private var loading = true
+    @State private var loadRequest = UUID()
 
     var body: some View {
         ZStack {
@@ -57,7 +58,7 @@ struct NotificationsView: View {
             }
         }
         .refreshable { await load() }
-        .task { await load() }
+        .task(id: session.token) { items = []; await load() }
         .onChange(of: session.unreadNotifications) { _, _ in Task { await load() } }
         .navigationDestination(item: $selectedChallenge) { route in
             DailyChallengeView(challengeID: route.id)
@@ -144,6 +145,9 @@ struct NotificationsView: View {
     }
 
     @MainActor private func load() async {
+        let request = UUID()
+        loadRequest = request
+        let owner = session.user?.id
         guard let token = session.token else { loading = false; return }
         let cacheKey = session.userCacheKey("notifications.list")
         if items.isEmpty, let cached: NotificationListResponse = session.api.cachedResponse(for: cacheKey) {
@@ -151,15 +155,17 @@ struct NotificationsView: View {
             session.unreadNotifications = cached.unread ?? cached.items.filter { !$0.isRead }.count
         }
         loading = items.isEmpty
-        defer { loading = false }
+        defer { if loadRequest == request { loading = false } }
         do {
             let response: NotificationListResponse = try await session.api.requestCached(
                 "/api/notifications", token: token, cacheKey: cacheKey
             )
+            guard !Task.isCancelled, loadRequest == request, session.token == token, session.user?.id == owner else { return }
             items = response.items
             session.unreadNotifications = response.unread ?? response.items.filter { !$0.isRead }.count
             error = nil
         } catch {
+            guard !Task.isCancelled, loadRequest == request, session.token == token, session.user?.id == owner else { return }
             self.error = items.isEmpty ? error.localizedDescription : nil
         }
     }
@@ -174,12 +180,18 @@ struct NotificationsView: View {
 
     private func mutate(_ path: String, method: HTTPMethod) {
         guard let token = session.token else { return }
+        let owner = session.user?.id
+        loadRequest = UUID()
         Task { @MainActor in
             do {
                 let _: EmptyResponse = try await session.api.request(path, method: method, body: EmptyBody(), token: token)
+                guard session.token == token, session.user?.id == owner else { return }
                 session.api.removeCachedResponse(for: session.userCacheKey("notifications.list"))
                 Haptics.selection(); await load()
-            } catch { self.error = error.localizedDescription }
+            } catch {
+                guard session.token == token, session.user?.id == owner else { return }
+                self.error = error.localizedDescription
+            }
         }
     }
 }
