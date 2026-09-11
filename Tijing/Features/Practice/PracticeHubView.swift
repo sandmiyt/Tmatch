@@ -26,13 +26,6 @@ struct PracticeHubView: View {
                         header
                             .tijingReveal(order: 0)
 
-                        NavigationLink { StudyPlanView() } label: {
-                            TijingSettingsRow("学习周报 · 目标计划", subtitle: "个性化复习、每日预算与七天趋势", systemImage: "calendar.badge.clock", tint: TijingDesign.indigo)
-                        }.buttonStyle(.plain).tijingCard()
-                        NavigationLink { PracticeDeliveryView() } label: {
-                            Label("补交中心 · \(session.submissions.pending.count) 条待确认", systemImage: "arrow.triangle.2.circlepath")
-                        }
-
                         ForEach(Array(catalog.enumerated()), id: \.element.id) { offset, subject in
                             subjectCard(subject)
                                 .tijingReveal(order: min(offset + 1, 8))

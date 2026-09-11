@@ -1,9 +1,0 @@
-{
-  "target_name": "iOS与网页版共用计划",
-  "target_date": "2026-12-01",
-  "daily_minutes": 30,
-  "daily_questions": 30,
-  "desired_retention": 0.91,
-  "review_algorithm": "fsrs",
-  "configured": true
-}

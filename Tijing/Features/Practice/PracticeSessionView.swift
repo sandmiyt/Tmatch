@@ -166,9 +166,9 @@ struct PracticeSessionView: View {
                         .foregroundStyle(.red)
                 }
                 if store.currentAnswerLocked && store.feedbackForCurrent() == nil {
-                    NavigationLink { PracticeDeliveryView() } label: {
-                        Label("答案已保存或正在确认，查看补交中心", systemImage: "arrow.triangle.2.circlepath")
-                    }
+                    Label("答案待确认，请使用下方提交按钮重试", systemImage: "arrow.triangle.2.circlepath")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
 
             }

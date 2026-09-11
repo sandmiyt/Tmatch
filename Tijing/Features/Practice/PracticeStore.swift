@@ -267,7 +267,7 @@ final class PracticeSessionStore {
         guard isImmediate, !questions.isEmpty, !isSubmitting else { return }
         restoreConfirmedSubmissions()
         guard !outbox.pending.contains(where: { $0.id.hasPrefix(attemptID + "-q-") }) else {
-            error = "本组仍有待确认答案，请先到补交中心确认后再结束。"
+            error = "本组仍有待确认答案，请回到对应题目重试确认后再结束。"
             return
         }
         isSubmitting = true

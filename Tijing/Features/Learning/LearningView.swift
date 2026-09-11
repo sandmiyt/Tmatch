@@ -22,7 +22,6 @@ struct LearningView: View {
                     LazyVStack(spacing: 26) {
                         header
                             .tijingReveal(order: 0)
-                        NavigationLink("学习周报 · 目标计划") { StudyPlanView() }
                         snapshotCard(diagnostics)
                             .tijingReveal(order: 1)
                         focusNote(diagnostics)

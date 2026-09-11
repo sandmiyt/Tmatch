@@ -107,23 +107,10 @@ import XCTest
         do { let _: AnswerFeedback = try await queue.submit(id: "disk", path: "/api/practice/answer", body: body(), userID: 1, token: "a"); XCTFail("Must fail") } catch { }
     }
 
-    func testPlanBoundsAndBeijingDateRoundTrip() {
-        var plan = StudyPlan(target_name: "备考", target_date: "2026-09-11", daily_minutes: 30, daily_questions: 30, desired_retention: 0.9, review_algorithm: "fsrs")
-        XCTAssertTrue(plan.isValid)
-        plan.desired_retention = 0.98; XCTAssertFalse(plan.isValid)
-        plan.desired_retention = 0.9; plan.target_name = "  "; XCTAssertFalse(plan.isValid)
-        XCTAssertEqual(StudyDate.string(StudyDate.date("2026-09-11")!), "2026-09-11")
-    }
-
     func testDecodeActualSharedBackendFixtures() throws {
         func fixture(_ name: String) throws -> Data {
             try Data(contentsOf: XCTUnwrap(Bundle.module.url(forResource: name, withExtension: "json")))
         }
-        let plan = try JSONDecoder().decode(StudyPlan.self, from: fixture("plan"))
-        XCTAssertTrue(plan.isValid)
-        let week = try JSONDecoder().decode(LearningWeekReport.self, from: fixture("weekly"))
-        XCTAssertEqual(week.days.count, 7)
-        XCTAssertEqual(week.plan, plan)
         let batch = try JSONDecoder().decode(PracticeBatchResult.self, from: fixture("batch"))
         XCTAssertEqual(batch.total, 2); XCTAssertEqual(batch.correct, 2)
         let answer = try JSONDecoder().decode(AnswerFeedback.self, from: fixture("answer"))
